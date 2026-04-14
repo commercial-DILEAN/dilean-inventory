@@ -540,7 +540,13 @@ function loadSettingsForm(){
 }
 function renderLocsList(){
   var el=document.getElementById('locs-list');
-  el.innerHTML=locs.map(function(l){return'<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:var(--b2);border-radius:20px;font-size:12px;border:.5px solid var(--br1)">'+l+'<button onclick="removeLoc(\''+l.replace(/'/g,"\\'")+'\')" style="background:none;border:none;cursor:pointer;color:var(--d);font-size:13px;line-height:1;padding:0 2px">×</button></span>';}).join('');
+  var allLocs=getAllLocs();
+  el.innerHTML=allLocs.map(function(l){
+    var isClient=clients.some(function(c){return c.name===l;});
+    var tag=isClient?'<span style="font-size:10px;background:#e6f1fb;color:#185fa5;border-radius:10px;padding:1px 5px;margin-left:3px">cliente</span>':'';
+    var removeBtn=isClient?'':'<button onclick="removeLoc(\''+l.replace(/'/g,"\\'")+'\')" style="background:none;border:none;cursor:pointer;color:var(--d);font-size:13px;line-height:1;padding:0 2px">×</button>';
+    return'<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:var(--b2);border-radius:20px;font-size:12px;border:.5px solid var(--br1)">'+l+tag+removeBtn+'</span>';
+  }).join('');
 }
 async function saveSettings(){
   cfg={name:document.getElementById('cfg-name').value.trim(),addr:document.getElementById('cfg-addr').value.trim(),phone:document.getElementById('cfg-phone').value.trim(),email:document.getElementById('cfg-email').value.trim(),bank:document.getElementById('cfg-bank').value.trim(),acct:document.getElementById('cfg-acct').value.trim(),wire:document.getElementById('cfg-wire').value.trim(),swift:document.getElementById('cfg-swift').value.trim(),zelle:document.getElementById('cfg-zelle').value.trim(),bankAddr:document.getElementById('cfg-bankaddr').value.trim()};
@@ -647,14 +653,21 @@ function useClientInInvoice(id){
 
 // ── SELECTS ───────────────────────────────────────────
 function getMats(){return[...new Set(slabs.map(function(s){return s.material;}))].sort();}
+function getAllLocs(){
+  // sempre combina locais salvos + nomes de clientes cadastrados
+  var all=locs.slice();
+  clients.forEach(function(c){if(c.name&&all.indexOf(c.name)===-1)all.push(c.name);});
+  return all;
+}
 function rebuildSels(){
+  var allLocs=getAllLocs();
   ['fl','floc','ifl'].forEach(function(id){
     var el=document.getElementById(id);if(!el)return;
     var cur=el.value;
     if(id==='fl')el.innerHTML='<option value="">Todos os locais</option>';
     else if(id==='ifl')el.innerHTML='<option value="">Todos os clientes</option>';
     else el.innerHTML='';
-    locs.forEach(function(l){var o=document.createElement('option');o.value=l;o.textContent=l;el.appendChild(o);});
+    allLocs.forEach(function(l){var o=document.createElement('option');o.value=l;o.textContent=l;el.appendChild(o);});
     if(cur)el.value=cur;
   });
   var ms=document.getElementById('fm');var cm=ms?ms.value:'';
