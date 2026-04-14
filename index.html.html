@@ -231,7 +231,7 @@ table tr:hover td{background:var(--b2);}
     <!-- CLIENTES -->
     <div id="page-clients" class="hidden">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-        <span style="font-size:13px;color:var(--t2)">Empresas cadastradas — clique para usar na invoice automaticamente</span>
+        <span style="font-size:13px;color:var(--t2)">Empresas cadastradas — ao cadastrar aqui, o nome aparece automaticamente como local no estoque e na invoice</span>
         <button class="btn p" onclick="openClientModal()">+ Nova Empresa</button>
       </div>
       <div id="clients-list"></div>
@@ -594,15 +594,30 @@ function openClientModal(id){
 async function saveClient(){
   var name=document.getElementById('cli-name').value.trim();if(!name){alert('Nome obrigatório.');return;}
   var c={id:editClientId||uid(),name:name,contact:document.getElementById('cli-contact').value.trim(),addr:document.getElementById('cli-addr').value.trim(),phone:document.getElementById('cli-phone').value.trim(),email:document.getElementById('cli-email').value.trim(),cid:document.getElementById('cli-cid').value.trim(),obs:document.getElementById('cli-obs').value.trim()};
-  if(editClientId)clients=clients.map(function(x){return x.id===editClientId?c:x;});
-  else clients.push(c);
-  sync('spin','Salvando...');await saveSetting('clients',clients);sync('ok','Salvo');
-  closeM('clim');renderClientsList();rebuildClientSel();
+  if(editClientId){
+    clients=clients.map(function(x){return x.id===editClientId?c:x;});
+    // atualiza o nome no array de locais se mudou
+    var old=clients.find(function(x){return x.id===editClientId;});
+    if(old&&old.name!==name){locs=locs.map(function(l){return l===old.name?name:l;});}
+  } else {
+    clients.push(c);
+    // adiciona como local automaticamente
+    if(locs.indexOf(name)===-1){locs.push(name);}
+  }
+  sync('spin','Salvando...');
+  await Promise.all([saveSetting('clients',clients),saveSetting('locations',locs)]);
+  sync('ok','Salvo');
+  closeM('clim');renderClientsList();rebuildSels();renderLocsList();
 }
 async function deleteClient(id){
-  if(!confirm('Excluir esta empresa?'))return;
+  if(!confirm('Excluir esta empresa? Ela tambem sera removida da lista de locais.'))return;
+  var c=clients.find(function(x){return x.id===id;});
   clients=clients.filter(function(x){return x.id!==id;});
-  await saveSetting('clients',clients);renderClientsList();rebuildClientSel();
+  if(c)locs=locs.filter(function(l){return l!==c.name;});
+  sync('spin','Salvando...');
+  await Promise.all([saveSetting('clients',clients),saveSetting('locations',locs)]);
+  sync('ok','Salvo');
+  renderClientsList();rebuildSels();renderLocsList();
 }
 function rebuildClientSel(){
   var el=document.getElementById('cli-sel');if(!el)return;
