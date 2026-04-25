@@ -911,11 +911,7 @@ async function regP(id){
   inv.paid=val;inv.status=val>=inv.total?'paid':val>0?'partial':'pending';
   try{
     sync('spin','Salvando...');await sbU('invoices',id,{paid:inv.paid,status:inv.status});
-    // se pago total, dar baixa nas chapas
-    if(inv.status==='paid'){
-      var sids=inv.slab_ids||[];
-      for(var i=0;i<sids.length;i++){var s=slabs.find(function(x){return x.id===sids[i];});if(s&&s.status!=='sold'){s.status='sold';await sbU('slabs',s.id,{status:'sold',sold_to:inv.client});}}
-    }
+    // chapas já foram baixadas no momento do faturamento
     sync('ok','Salvo');renderInvoices();renderStats();renderTable();
   }catch(e){sync('err','Erro');alert(e.message);}
 }
@@ -1035,10 +1031,8 @@ async function saveInv(){
       await sbI('invoices',[inv]);
       invoices.push(inv);
     }
-    // dar baixa automática se status = paid
-    if(inv.status==='paid'){
-      for(var i=0;i<selIds.length;i++){var s=slabs.find(function(x){return x.id===selIds[i];});if(s&&s.status!=='sold'){s.status='sold';s.sold_to=client;await sbU('slabs',s.id,{status:'sold',sold_to:client});}}
-    }
+    // dar baixa automática assim que faturar — chapa saiu independente do pagamento
+    for(var i=0;i<selIds.length;i++){var s=slabs.find(function(x){return x.id===selIds[i];});if(s&&s.status!=='sold'){s.status='sold';s.sold_to=client;await sbU('slabs',s.id,{status:'sold',sold_to:client});}}
     sync('ok','Salvo');closeM('ivm');rebuildSels();renderInvoices();renderStats();renderTable();
   }catch(e){sync('err','Erro');alert(e.message);}
 }
