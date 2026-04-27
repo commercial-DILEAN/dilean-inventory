@@ -828,6 +828,8 @@ function openD(id){
   var sf=sqft(s),tv=sv(s);
   document.getElementById('dt').textContent=s.material+' — Lote '+s.lot+' #'+s.num;
   var ph=s.photo?'<img src="'+s.photo+'" style="width:100%;max-height:200px;object-fit:cover;border-radius:8px;margin-bottom:10px">':'';
+  // busca invoice relacionada a esta chapa
+  var relInv=invoices.find(function(i){return(i.slab_ids||[]).indexOf(s.id)!==-1;});
   document.getElementById('db').innerHTML=ph+
     '<div class="dp">'+
     '<div class="kv"><span class="kk">Tipo</span><span class="kval">'+s.type+'</span></div>'+
@@ -837,7 +839,10 @@ function openD(id){
     '<div class="kv"><span class="kk">Preço/sqft</span><span class="kval">'+(s.price_per_sqft?'$'+s.price_per_sqft:'—')+'</span></div>'+
     '<div class="kv"><span class="kk">Valor total</span><span class="kval">'+(tv?fmt(tv):'—')+'</span></div>'+
     '<div class="kv"><span class="kk">Status</span><span class="kval">'+badge(s.status)+'</span></div>'+
-    (s.sold_to?'<div class="kv"><span class="kk">Cliente</span><span class="kval">'+s.sold_to+'</span></div>':'')+
+    (s.sold_to?'<div class="kv"><span class="kk">Vendida para</span><span class="kval">'+s.sold_to+'</span></div>':'')+
+    (relInv?'<div class="kv"><span class="kk">Invoice</span><span class="kval" style="color:var(--a);">'+relInv.num+' — '+relInv.date+'</span></div>':'')+
+    (relInv?'<div class="kv"><span class="kk">Valor faturado</span><span class="kval">'+fmt(relInv.total)+'</span></div>':'')+
+    (relInv?'<div class="kv"><span class="kk">Status pagamento</span><span class="kval">'+({paid:'✅ Pago',partial:'⏳ Parcial',pending:'🔴 Pendente'}[relInv.status]||relInv.status)+'</span></div>':'')+
     (s.obs?'<div class="kv"><span class="kk">Obs</span><span class="kval" style="max-width:220px;word-break:break-word">'+s.obs+'</span></div>':'')+
     '</div>';
   document.getElementById('ddel').onclick=async function(){
@@ -1054,9 +1059,9 @@ function buildInvHTML(inv){
     Object.values(groups).forEach(function(g){
       g.items.forEach(function(s){
         var sf=sqft(s),tv=sv(s);
-        rows+='<tr><td>Slab of '+g.material+' — Lot '+s.lot+' #'+s.num+(s.width&&s.height?' ('+s.width+'"×'+s.height+'" / '+sf.toFixed(2)+' sqft)':'')+'</td>'+
+        rows+='<tr><td>Slab of '+g.material+' — Lot '+s.lot+' #'+s.num+'</td>'+
           '<td style="text-align:center">1</td>'+
-          '<td style="text-align:right">$'+g.price+'/sqft</td>'+
+          '<td style="text-align:right">'+(sf?sf.toFixed(2):'—')+'</td>'+
           '<td style="text-align:right">'+fmt(tv)+'</td></tr>';
       });
     });
@@ -1064,18 +1069,18 @@ function buildInvHTML(inv){
     // agrupado por material (comportamento padrão)
     var groups2={};
     ch.forEach(function(s){var sf2=sqft(s),tv2=sv(s),key=s.material+'||'+s.price_per_sqft;if(!groups2[key])groups2[key]={material:s.material,price:s.price_per_sqft,sqfts:[],total:0};groups2[key].sqfts.push(sf2);groups2[key].total+=tv2;});
-    Object.values(groups2).forEach(function(g){var ts=g.sqfts.reduce(function(a,b){return a+b;},0);rows+='<tr><td>Slabs of '+g.material+' $'+g.price+'/sqft</td><td style="text-align:center">'+g.sqfts.length+'</td><td style="text-align:right">'+fmt(ts/g.sqfts.length)+'</td><td style="text-align:right">'+fmt(g.total)+'</td></tr>';});
+    Object.values(groups2).forEach(function(g){var ts=g.sqfts.reduce(function(a,b){return a+b;},0);rows+='<tr><td>Slabs of '+g.material+' $'+g.price+'/sqft</td><td style="text-align:center">'+g.sqfts.length+'</td><td style="text-align:right">'+(ts/g.sqfts.length).toFixed(2)+'</td><td style="text-align:right">'+fmt(g.total)+'</td></tr>';});
   }
 
   var extras=inv.extra_items||[];
-  extras.forEach(function(item){rows+='<tr><td>'+item.desc+'</td><td style="text-align:center">'+item.qty+'</td><td style="text-align:right">'+(item.unit?fmt(item.unit):'—')+'</td><td style="text-align:right">'+fmt(item.amt)+'</td></tr>';});
+  extras.forEach(function(item){rows+='<tr><td>'+item.desc+'</td><td style="text-align:center">'+item.qty+'</td><td style="text-align:right">'+(item.unit?item.unit.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):'—')+'</td><td style="text-align:right">'+fmt(item.amt)+'</td></tr>';});
 
   var ps='';if(inv.pay_text){ps='<div style="margin-top:5px;font-size:11px;line-height:1.8">'+inv.pay_text.split('\n').map(function(l){return'<div>'+l+'</div>';}).join('')+'</div>';}
   return'<div class="id"><div class="idh"><div><div class="icn">'+(inv.co_name||cfg.name)+'</div><div class="ica">'+(inv.co_addr||cfg.addr)+(inv.co_phone?'<br>Tel/Zelle: '+inv.co_phone:'')+(inv.co_email?'<br>'+inv.co_email:'')+'</div></div>'+
     '<div class="idt"><div class="wi">INVOICE</div><div class="in">INVOICE # '+inv.num+'</div>'+(inv.cust_id?'<div class="in">CUSTOMER ID: '+inv.cust_id+'</div>':'')+'<div class="in">DATE: '+inv.date+'</div></div></div>'+
     '<div class="ibr"><div class="ibb"><div class="ibbt">Bill To</div><div class="ibbn">'+inv.client+'</div>'+(inv.client_addr?'<div class="ibba">'+inv.client_addr+'</div>':'')+
     '</div><div class="ibb"><div class="ibbt">Terms</div><strong>'+({installments:'Payment Schedule',due30:'Net 30',due15:'Net 15',immediate:'Due on Receipt',custom:'See below'}[inv.pay_type]||'—')+'</strong>'+ps+'</div></div>'+
-    '<table class="iit"><thead><tr><th>Description</th><th style="text-align:center">Qty</th><th style="text-align:right">Unit Price</th><th style="text-align:right">Amount</th></tr></thead><tbody>'+rows+'</tbody></table>'+
+    '<table class="iit"><thead><tr><th>Description</th><th style="text-align:center">Qty</th><th style="text-align:right">Sqft</th><th style="text-align:right">Amount</th></tr></thead><tbody>'+rows+'</tbody></table>'+
     '<div class="itl"><div class="itb"><div class="itr"><span>Subtotal</span><span>'+fmt(inv.total)+'</span></div><div class="itr"><span>Tax</span><span>—</span></div><div class="itr fin"><span>TOTAL</span><span>'+fmt(inv.total)+'</span></div></div></div>'+
     '<div class="ib"><div class="ibt">Payment Information</div><div class="ibg">'+
     '<div class="ibkv"><span class="ibk">Bank:</span><span class="ibv">'+(inv.bank||cfg.bank)+'</span></div>'+
