@@ -430,68 +430,15 @@ table tr:hover td{background:var(--b2);}
 </div>
 
 <script>
-// ── NEON DATABASE CONFIG ──────────────────────────────
-var NEON_URL='https://ep-gentle-cloud-apmyigav-pooler.c-7.us-east-1.aws.neon.tech';
-var NEON_USER='neondb_owner';
-var NEON_PASS='npg_FjY1UwXW7qSD';
-var NEON_DB='neondb';
+var SB='https://plsgcaiqmltljytchvvt.supabase.co';
+var SK='sb_publishable_QexQ4PIBOved8ajDR42xqQ_UbzeLhYL';
+var H={'Content-Type':'application/json','apikey':SK,'Authorization':'Bearer '+SK,'Prefer':'return=representation'};
 
-async function neonQuery(sql, params){
-  var r = await fetch(NEON_URL+'/sql', {
-    method:'POST',
-    headers:{
-      'Content-Type':'application/json',
-      'Authorization':'Bearer '+NEON_PASS,
-      'Neon-Connection-String':'postgresql://'+NEON_USER+':'+NEON_PASS+'@'+NEON_URL.replace('https://','').replace('-pooler.','.')+'/'+NEON_DB+'?sslmode=require'
-    },
-    body:JSON.stringify({query:sql, params:params||[]})
-  });
-  if(!r.ok){var e=await r.text();throw new Error(e);}
-  return r.json();
-}
-
-// Helper: convert row array to object array
-function rowsToObjects(result){
-  if(!result||!result.rows||!result.fields)return[];
-  var fields=result.fields.map(function(f){return f.name;});
-  return result.rows.map(function(row){
-    var obj={};
-    fields.forEach(function(f,i){obj[f]=row[i];});
-    return obj;
-  });
-}
-
-async function sbG(t){
-  var r=await neonQuery('SELECT * FROM '+t+' ORDER BY created_at ASC');
-  return rowsToObjects(r);
-}
-async function sbI(t,d){
-  var arr=Array.isArray(d)?d:[d];
-  for(var i=0;i<arr.length;i++){
-    var obj=arr[i];
-    var keys=Object.keys(obj).filter(function(k){return obj[k]!==undefined&&obj[k]!==null;});
-    var vals=keys.map(function(k){return obj[k];});
-    var placeholders=keys.map(function(_,i){return'$'+(i+1);});
-    await neonQuery('INSERT INTO '+t+' ('+keys.join(',')+') VALUES ('+placeholders.join(',')+') ON CONFLICT (id) DO NOTHING',vals);
-  }
-}
-async function sbU(t,id,d){
-  var keys=Object.keys(d).filter(function(k){return k!=='id'&&d[k]!==undefined;});
-  var sets=keys.map(function(k,i){return k+'=$'+(i+1);});
-  var vals=keys.map(function(k){return d[k];});
-  vals.push(id);
-  await neonQuery('UPDATE '+t+' SET '+sets.join(',')+' WHERE id=$'+vals.length,vals);
-}
-async function sbD(t,id){
-  await neonQuery('DELETE FROM '+t+' WHERE id=$1',[id]);
-}
-async function sbUpsert(t,d){
-  var keys=Object.keys(d).filter(function(k){return d[k]!==undefined;});
-  var vals=keys.map(function(k){return d[k];});
-  var placeholders=keys.map(function(_,i){return'$'+(i+1);});
-  var updates=keys.filter(function(k){return k!=='key';}).map(function(k,i){return k+'=EXCLUDED.'+k;});
-  await neonQuery('INSERT INTO '+t+' ('+keys.join(',')+') VALUES ('+placeholders.join(',')+') ON CONFLICT (key) DO UPDATE SET '+updates.join(','),vals);
-}
+async function sbG(t,q){var r=await fetch(SB+'/rest/v1/'+t+'?order=created_at.asc'+(q||''),{headers:H});if(!r.ok)throw new Error(await r.text());return r.json();}
+async function sbI(t,d){var r=await fetch(SB+'/rest/v1/'+t,{method:'POST',headers:H,body:JSON.stringify(d)});if(!r.ok)throw new Error(await r.text());return r.json();}
+async function sbU(t,id,d){var r=await fetch(SB+'/rest/v1/'+t+'?id=eq.'+id,{method:'PATCH',headers:H,body:JSON.stringify(d)});if(!r.ok)throw new Error(await r.text());return r.json();}
+async function sbD(t,id){var r=await fetch(SB+'/rest/v1/'+t+'?id=eq.'+id,{method:'DELETE',headers:H});if(!r.ok)throw new Error(await r.text());}
+async function sbUpsert(t,d){var r=await fetch(SB+'/rest/v1/'+t,{method:'POST',headers:Object.assign({},H,{'Prefer':'resolution=merge-duplicates'}),body:JSON.stringify(d)});if(!r.ok)throw new Error(await r.text());return r.json();}
 
 var slabs=[],invoices=[],clients=[],locs=['Meta Surface','ZTX Surfaces','Pacific Shore','Hope Solutions','Escritório'];
 var editId=null,editInvId=null,editClientId=null,selLoc=null,selIds=[],curPhoto=null,eic=0;
@@ -541,61 +488,33 @@ async function init(){
   document.getElementById('setup-screen').classList.add('hidden');
   sync('spin','Conectando...');
   try{
-    // Create tables if not exist
-    await neonQuery(`CREATE TABLE IF NOT EXISTS slabs (
-      id text primary key, lot text not null, num text not null, material text not null,
-      type text, width numeric, height numeric, location text, price_per_sqft numeric,
-      status text default 'available', sold_to text, obs text, photo text,
-      created_at timestamptz default now()
-    )`);
-    await neonQuery(`CREATE TABLE IF NOT EXISTS invoices (
-      id text primary key, num text not null, client text not null, client_addr text,
-      date text, total numeric default 0, paid numeric default 0, status text default 'pending',
-      slab_ids jsonb default '[]', extra_items jsonb default '[]', show_slab_details boolean default false,
-      pay_type text, pay_text text, cust_id text,
-      co_name text, co_addr text, co_phone text, co_email text,
-      bank text, acct text, wire text, swift text, zelle text, bank_addr text, obs text,
-      created_at timestamptz default now()
-    )`);
-    await neonQuery(`CREATE TABLE IF NOT EXISTS settings (
-      key text primary key, value jsonb, updated_at timestamptz default now()
-    )`);
-
-    // Load all data
-    var [sd,id,set]=await Promise.all([sbG('slabs'),sbG('invoices'),sbG('settings')]);
+    var r=await fetch(SB+'/rest/v1/slabs?limit=1',{headers:H});
+    if(r.status===404||r.status===400||r.status===401){showSetup();return;}
+    var [sd,id,set]=await Promise.all([
+      sbG('slabs'),sbG('invoices'),
+      fetch(SB+'/rest/v1/settings',{headers:H}).then(function(r){return r.json();})
+    ]);
     slabs=sd||[];invoices=id||[];
     if(set&&Array.isArray(set)){
       set.forEach(function(s){
-        if(s.key==='locations'&&s.value)locs=typeof s.value==='string'?JSON.parse(s.value):s.value;
-        if(s.key==='config'&&s.value)Object.assign(cfg,typeof s.value==='string'?JSON.parse(s.value):s.value);
-        if(s.key==='clients'&&s.value)clients=typeof s.value==='string'?JSON.parse(s.value):s.value;
+        if(s.key==='locations'&&s.value)locs=s.value;
+        if(s.key==='config'&&s.value)Object.assign(cfg,s.value);
+        if(s.key==='clients'&&s.value)clients=s.value;
       });
     }
-    // parse jsonb fields in slabs and invoices
-    slabs=slabs.map(function(s){return s;});
-    invoices=invoices.map(function(i){
-      if(typeof i.slab_ids==='string')i.slab_ids=JSON.parse(i.slab_ids);
-      if(typeof i.extra_items==='string')i.extra_items=JSON.parse(i.extra_items);
-      return i;
-    });
     sync('ok','Sincronizado '+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}));
     document.getElementById('loading-screen').classList.add('hidden');
     document.getElementById('page-inventory').classList.remove('hidden');
     rebuildSels();renderStats();renderTable();loadSettingsForm();
   }catch(e){
+    if(e.message&&e.message.includes('does not exist')){showSetup();return;}
     sync('err','Erro de conexão');
-    console.error(e);
-    document.getElementById('loading-screen').innerHTML='<div style="text-align:center;padding:40px;color:var(--d)">Erro: '+e.message+'<br><br><button class="btn p" onclick="init()">Tentar novamente</button></div>';
+    document.getElementById('loading-screen').innerHTML='<div style="text-align:center;padding:40px;color:var(--d)">'+e.message+'<br><br><button class="btn p" onclick="init()">Tentar novamente</button></div>';
   }
 }
 function showSetup(){console.log('setup not needed with Neon');}
 async function saveSetting(key,value){
-  try{
-    await neonQuery(
-      'INSERT INTO settings (key,value,updated_at) VALUES ($1,$2,$3) ON CONFLICT (key) DO UPDATE SET value=$2, updated_at=$3',
-      [key, JSON.stringify(value), new Date().toISOString()]
-    );
-  }catch(e){console.error('saveSetting error',e);}
+  try{await sbUpsert('settings',{key:key,value:value,updated_at:new Date().toISOString()});}catch(e){console.error(e);}
 }
 
 // ── SETTINGS PAGE ──────────────────────────────────────
@@ -1091,7 +1010,7 @@ async function saveInv(){
   var inv={id:editInvId||uid(),num:num,client:client,client_addr:document.getElementById('icla').value.trim(),
     date:document.getElementById('idat').value,total:parseFloat(document.getElementById('itot').value)||0,
     paid:parseFloat(document.getElementById('ipai').value)||0,status:document.getElementById('istat').value,
-    slab_ids:JSON.stringify(selIds),extra_items:JSON.stringify(getEIs()),
+    slab_ids:selIds,extra_items:getEIs(),
     show_slab_details:document.getElementById('show-slab-details').checked,
     pay_type:document.getElementById('ipt').value,pay_text:document.getElementById('iptx').value.trim(),
     cust_id:document.getElementById('icid').value.trim(),
