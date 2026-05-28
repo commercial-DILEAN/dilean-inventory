@@ -184,6 +184,7 @@ table tr:hover td{background:var(--b2);}
           <option value="reserved">Reservada</option><option value="consigned">Consignada</option>
         </select>
         <button class="btn p" onclick="openSM()">+ Nova Chapa</button>
+        <button class="btn" onclick="printSlabReport()">🖨 Relatório de estoque</button>
       </div>
       <div id="msum" class="hidden"><div class="sec" id="msumt"></div><div class="mc" id="mc"></div></div>
       <div class="tw">
@@ -1538,6 +1539,122 @@ function printFinancialReport(){
     '</div>';
 
   document.getElementById('print-area').innerHTML=html;
+  window.print();
+}
+
+function printSlabReport(){
+  var now = new Date();
+  var SLfull = {available:'Disponível', sold:'Vendida', reserved:'Reservada', consigned:'Consignada'};
+
+  // Group by material + lot
+  var groups = {};
+  slabs.forEach(function(s){
+    var key = s.material + '||' + s.lot;
+    if(!groups[key]) groups[key] = {material:s.material, lot:s.lot, type:s.type||'', slabs:[]};
+    groups[key].slabs.push(s);
+  });
+
+  // Build rows
+  var allRows = '';
+  var totalSlabs = 0, totalAvail = 0, totalSold = 0, totalCons = 0, totalRes = 0;
+  var totalSqft = 0, totalValue = 0;
+
+  Object.values(groups).sort(function(a,b){
+    return (a.material+a.lot).localeCompare(b.material+b.lot);
+  }).forEach(function(g){
+    // Group header
+    allRows += '<tr style="background:#1a5c3a;color:#fff">'+
+      '<td colspan="9" style="padding:6px 10px;font-weight:600;font-size:12px">'+
+      g.material+' ('+g.type+') — Lote '+g.lot+
+      ' <span style="font-weight:400;font-size:11px;opacity:.85">('+g.slabs.length+' chapas)</span>'+
+      '</td></tr>';
+
+    g.slabs.sort(function(a,b){return (a.num||'').localeCompare(b.num||'',undefined,{numeric:true});}).forEach(function(s,idx){
+      var sf = (s.width&&s.height) ? +((s.width*s.height)/144).toFixed(2) : 0;
+      var tv = (sf&&s.price_per_sqft) ? +(sf*s.price_per_sqft).toFixed(2) : 0;
+      totalSlabs++; totalSqft+=sf; totalValue+=tv;
+      if(s.status==='available')totalAvail++;
+      else if(s.status==='sold')totalSold++;
+      else if(s.status==='consigned')totalCons++;
+      else if(s.status==='reserved')totalRes++;
+
+      // find invoice
+      var relInv = invoices.find(function(i){return(i.slab_ids||[]).indexOf(s.id)!==-1;});
+      var stColor = {available:'#3b6d11',sold:'#a32d2d',reserved:'#854f0b',consigned:'#185fa5'};
+      var stBg = {available:'#eaf3de',sold:'#fcebeb',reserved:'#faeeda',consigned:'#e6f1fb'};
+      var bg = idx%2===0?'#fff':'#f8faf8';
+
+      allRows += '<tr style="background:'+bg+'">'+
+        '<td style="padding:5px 10px;border-bottom:1px solid #e8f0eb;font-weight:600">#'+s.num+'</td>'+
+        '<td style="padding:5px 10px;border-bottom:1px solid #e8f0eb">'+s.location+'</td>'+
+        '<td style="padding:5px 10px;border-bottom:1px solid #e8f0eb;white-space:nowrap">'+(s.width&&s.height?s.width+'" × '+s.height+'"':'—')+'</td>'+
+        '<td style="padding:5px 10px;border-bottom:1px solid #e8f0eb;text-align:right">'+(sf?sf.toFixed(2):'—')+'</td>'+
+        '<td style="padding:5px 10px;border-bottom:1px solid #e8f0eb;text-align:right">'+(s.price_per_sqft?'$'+s.price_per_sqft:'—')+'</td>'+
+        '<td style="padding:5px 10px;border-bottom:1px solid #e8f0eb;text-align:right">'+(tv?'$'+tv.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):'—')+'</td>'+
+        '<td style="padding:5px 10px;border-bottom:1px solid #e8f0eb;text-align:center">'+
+          '<span style="padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600;background:'+(stBg[s.status]||'#eee')+';color:'+(stColor[s.status]||'#333')+'">'+
+          (SLfull[s.status]||s.status)+'</span></td>'+
+        '<td style="padding:5px 10px;border-bottom:1px solid #e8f0eb;font-size:11px">'+(s.sold_to||'—')+'</td>'+
+        '<td style="padding:5px 10px;border-bottom:1px solid #e8f0eb;font-size:11px">'+(relInv?relInv.num:'—')+'</td>'+
+        '</tr>';
+    });
+  });
+
+  var html = '<div style="font-family:Arial,sans-serif;color:#000;padding:28px;max-width:1000px">'+
+    // Header
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;border-bottom:3px solid #1a5c3a;padding-bottom:12px">'+
+    '<div>'+
+    '<div style="font-size:20px;font-weight:700;color:#1a5c3a">DILEAN MARBLES CORP</div>'+
+    '<div style="font-size:11px;color:#666;margin-top:3px">1661 E Sample Rd, Pompano Beach FL 33064</div>'+
+    '</div>'+
+    '<div style="text-align:right">'+
+    '<div style="font-size:18px;font-weight:700;color:#1a5c3a">RELATÓRIO DE ESTOQUE</div>'+
+    '<div style="font-size:11px;color:#666;margin-top:3px">Gerado em: '+now.toLocaleDateString('pt-BR')+' às '+now.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})+'</div>'+
+    '</div></div>'+
+
+    // Summary
+    '<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:16px">'+
+    '<div style="background:#f0f7f3;border:1px solid #cde3d6;border-radius:6px;padding:8px;text-align:center">'+
+    '<div style="font-size:10px;color:#2a6049;font-weight:600;text-transform:uppercase">Total</div>'+
+    '<div style="font-size:20px;font-weight:700;color:#1a5c3a">'+totalSlabs+'</div></div>'+
+    '<div style="background:#eaf3de;border:1px solid #97c459;border-radius:6px;padding:8px;text-align:center">'+
+    '<div style="font-size:10px;color:#3b6d11;font-weight:600;text-transform:uppercase">Disponível</div>'+
+    '<div style="font-size:20px;font-weight:700;color:#3b6d11">'+totalAvail+'</div></div>'+
+    '<div style="background:#fcebeb;border:1px solid #f09595;border-radius:6px;padding:8px;text-align:center">'+
+    '<div style="font-size:10px;color:#a32d2d;font-weight:600;text-transform:uppercase">Vendida</div>'+
+    '<div style="font-size:20px;font-weight:700;color:#a32d2d">'+totalSold+'</div></div>'+
+    '<div style="background:#e6f1fb;border:1px solid #85b7eb;border-radius:6px;padding:8px;text-align:center">'+
+    '<div style="font-size:10px;color:#185fa5;font-weight:600;text-transform:uppercase">Consignada</div>'+
+    '<div style="font-size:20px;font-weight:700;color:#185fa5">'+totalCons+'</div></div>'+
+    '<div style="background:#faeeda;border:1px solid #fac775;border-radius:6px;padding:8px;text-align:center">'+
+    '<div style="font-size:10px;color:#854f0b;font-weight:600;text-transform:uppercase">Reservada</div>'+
+    '<div style="font-size:20px;font-weight:700;color:#854f0b">'+totalRes+'</div></div>'+
+    '<div style="background:#f0f7f3;border:1px solid #cde3d6;border-radius:6px;padding:8px;text-align:center">'+
+    '<div style="font-size:10px;color:#2a6049;font-weight:600;text-transform:uppercase">Valor total</div>'+
+    '<div style="font-size:14px;font-weight:700;color:#1a5c3a">$'+Math.round(totalValue).toLocaleString('en-US')+'</div></div>'+
+    '</div>'+
+
+    // Table
+    '<table style="width:100%;border-collapse:collapse;font-size:11px">'+
+    '<thead><tr style="background:#2a6049;color:#fff">'+
+    '<th style="padding:7px 10px;text-align:left">Chapa</th>'+
+    '<th style="padding:7px 10px;text-align:left">Local</th>'+
+    '<th style="padding:7px 10px;text-align:left">Dimensões</th>'+
+    '<th style="padding:7px 10px;text-align:right">Sqft</th>'+
+    '<th style="padding:7px 10px;text-align:right">$/sqft</th>'+
+    '<th style="padding:7px 10px;text-align:right">Valor</th>'+
+    '<th style="padding:7px 10px;text-align:center">Status</th>'+
+    '<th style="padding:7px 10px;text-align:left">Cliente</th>'+
+    '<th style="padding:7px 10px;text-align:left">Invoice</th>'+
+    '</tr></thead>'+
+    '<tbody>'+allRows+'</tbody>'+
+    '</table>'+
+
+    '<div style="text-align:center;font-size:10px;color:#999;margin-top:12px;border-top:1px solid #e0e0e0;padding-top:8px">'+
+    'DILEAN MARBLES CORP — Relatório de Estoque — Total: '+totalSlabs+' chapas — '+totalSqft.toFixed(1)+' sqft — $'+Math.round(totalValue).toLocaleString('en-US')+
+    '</div></div>';
+
+  document.getElementById('print-area').innerHTML = html;
   window.print();
 }
 
