@@ -222,7 +222,16 @@ table tr:hover td{background:var(--b2);}
     <div id="page-report" class="hidden">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
         <span style="font-size:13px;color:var(--t2)">Visão geral financeira</span>
-        <button class="btn p" onclick="printFinancialReport()">🖨 Exportar relatório financeiro completo</button>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--t2)">
+            <span>Período:</span>
+            <input type="date" id="report-from" style="padding:5px 8px;border:.5px solid var(--br1);border-radius:var(--r);font-size:12px;background:var(--b1);color:var(--t1)" onchange="renderReport()">
+            <span>até</span>
+            <input type="date" id="report-to" style="padding:5px 8px;border:.5px solid var(--br1);border-radius:var(--r);font-size:12px;background:var(--b1);color:var(--t1)" onchange="renderReport()">
+            <button class="btn sm" onclick="clearReportFilter()">Limpar</button>
+          </div>
+          <button class="btn p" onclick="printFinancialReport()">🖨 Exportar relatório financeiro</button>
+        </div>
       </div>
       <div class="sr" id="rsr"></div>
       <div class="sec">Por local</div>
@@ -1215,15 +1224,23 @@ function printInv(){var inv=invoices.find(function(i){return i.id===window._pid;
 // ── RELATÓRIO ─────────────────────────────────────────
 function renderReport(){
   var s=calcStats();
+  var filteredInvs=getFilteredInvoices();
+  var from=document.getElementById('report-from')?document.getElementById('report-from').value:'';
+  var to=document.getElementById('report-to')?document.getElementById('report-to').value:'';
+  var isFiltered=from||to;
+  var fBilled=filteredInvs.reduce(function(a,i){return a+i.total;},0);
+  var fReceived=filteredInvs.reduce(function(a,i){return a+i.paid;},0);
+  var fAR=filteredInvs.filter(function(i){return i.status!=='paid';}).reduce(function(a,i){return a+(i.total-i.paid);},0);
+  var periodLabel=isFiltered?(' ('+(from||'início')+' a '+(to||'hoje')+')'):'';
   document.getElementById('rsr').innerHTML=
     '<div class="sc"><div class="sl">Total chapas</div><div class="sv bl">'+s.total+'</div></div>'+
     '<div class="sc"><div class="sl">Valor inventário</div><div class="sv">'+fmtI(s.inv)+'</div></div>'+
     '<div class="sc" style="background:var(--b2);border-radius:var(--r);padding:10px 12px;border:.5px solid var(--br1)">'+
-      '<div class="sl">Total faturado (todas invoices)</div><div class="sv bl">'+fmtI(s.billed)+'</div></div>'+
+      '<div class="sl">Total faturado'+periodLabel+'</div><div class="sv bl">'+fmtI(fBilled)+'</div></div>'+
     '<div class="sc" style="background:#eaf3de;border-radius:var(--r);padding:10px 12px;border:.5px solid #97c459">'+
-      '<div class="sl" style="color:#3b6d11">Total recebido</div><div class="sv g">'+fmtI(s.received)+'</div></div>'+
+      '<div class="sl" style="color:#3b6d11">Total recebido'+periodLabel+'</div><div class="sv g">'+fmtI(fReceived)+'</div></div>'+
     '<div class="sc" style="background:#fcebeb;border-radius:var(--r);padding:10px 12px;border:.5px solid #f09595">'+
-      '<div class="sl" style="color:#a32d2d">A receber (em aberto)</div><div class="sv r">'+fmtI(s.ar)+'</div></div>';
+      '<div class="sl" style="color:#a32d2d">A receber'+periodLabel+'</div><div class="sv r">'+fmtI(fAR)+'</div></div>';
   document.getElementById('rtb').innerHTML=locs.map(function(loc){
     var ls=slabs.filter(function(s){return s.location===loc;});if(!ls.length)return'';
     var tv=ls.reduce(function(a,s){return a+sv(s);},0),svv=ls.filter(function(s){return s.status==='sold';}).reduce(function(a,s){return a+sv(s);},0);
@@ -1248,7 +1265,7 @@ function renderReport(){
   }).join('');
 
   // A RECEBER — agrupado por cliente
-  var ar=invoices.filter(function(i){return i.status!=='paid';});
+  var ar=filteredInvs.filter(function(i){return i.status!=='paid';});
   var totalAR=ar.reduce(function(a,i){return a+(i.total-i.paid);},0);
   document.getElementById('ar-total').textContent=ar.length?'Total geral: '+fmt(totalAR):'';
   if(!ar.length){document.getElementById('ar-panel').innerHTML='<div class="empty">Nenhum saldo em aberto.</div>';return;}
@@ -1446,8 +1463,9 @@ function printFinancialReport(){
   var s=calcStats();
 
   // Group invoices by client
+  var printInvs=getFilteredInvoices();
   var byClient={};
-  invoices.forEach(function(inv){
+  printInvs.forEach(function(inv){
     if(!byClient[inv.client])byClient[inv.client]={invoices:[],billed:0,paid:0,ar:0};
     byClient[inv.client].invoices.push(inv);
     byClient[inv.client].billed+=inv.total;
@@ -1519,17 +1537,17 @@ function printFinancialReport(){
     '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px">'+
     '<div style="background:#f0f7f3;border:2px solid #1a5c3a;border-radius:8px;padding:14px;text-align:center">'+
     '<div style="font-size:11px;color:#2a6049;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Total Faturado</div>'+
-    '<div style="font-size:24px;font-weight:700;color:#1a5c3a">'+fmt(s.billed)+'</div>'+
-    '<div style="font-size:11px;color:#666;margin-top:4px">'+invoices.length+' invoices no total</div>'+
+    '<div style="font-size:24px;font-weight:700;color:#1a5c3a">'+fmt(printInvs.reduce(function(a,i){return a+i.total;},0))+'</div>'+
+    '<div style="font-size:11px;color:#666;margin-top:4px">'+printInvs.length+' invoices no período</div>'+
     '</div>'+
     '<div style="background:#f0f7f3;border:2px solid #2a6049;border-radius:8px;padding:14px;text-align:center">'+
     '<div style="font-size:11px;color:#2a6049;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Total Recebido</div>'+
-    '<div style="font-size:24px;font-weight:700;color:#2a6049">'+fmt(s.received)+'</div>'+
+    '<div style="font-size:24px;font-weight:700;color:#2a6049">'+fmt(printInvs.reduce(function(a,i){return a+i.paid;},0))+'</div>'+
     '<div style="font-size:11px;color:#666;margin-top:4px">'+(s.billed>0?(s.received/s.billed*100).toFixed(1):'0')+'% do total faturado</div>'+
     '</div>'+
     '<div style="background:#fff3f3;border:2px solid #a32d2d;border-radius:8px;padding:14px;text-align:center">'+
     '<div style="font-size:11px;color:#a32d2d;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">A Receber</div>'+
-    '<div style="font-size:24px;font-weight:700;color:#a32d2d">'+fmt(s.ar)+'</div>'+
+    '<div style="font-size:24px;font-weight:700;color:#a32d2d">'+fmt(printInvs.filter(function(i){return i.status!=='paid';}).reduce(function(a,i){return a+(i.total-i.paid);},0))+'</div>'+
     '<div style="font-size:11px;color:#666;margin-top:4px">'+invoices.filter(function(i){return i.status!=='paid';}).length+' invoices em aberto</div>'+
     '</div></div>'+
 
@@ -1756,6 +1774,22 @@ function printVisualReport(){
 
   document.getElementById('print-area').innerHTML=html;
   window.print();
+}
+
+function clearReportFilter(){
+  document.getElementById('report-from').value='';
+  document.getElementById('report-to').value='';
+  renderReport();
+}
+
+function getFilteredInvoices(){
+  var from=document.getElementById('report-from')?document.getElementById('report-from').value:'';
+  var to=document.getElementById('report-to')?document.getElementById('report-to').value:'';
+  return invoices.filter(function(i){
+    if(from&&i.date&&i.date<from)return false;
+    if(to&&i.date&&i.date>to)return false;
+    return true;
+  });
 }
 
 function closeM(id){document.getElementById(id).classList.add('hidden');}
