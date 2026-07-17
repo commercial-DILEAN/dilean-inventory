@@ -154,6 +154,8 @@ table tr:hover td{background:var(--b2);}
       <button class="nb" onclick="showPage('invoices')">Faturamento</button>
       <button class="nb" onclick="showPage('report')">Relatório</button>
       <button class="nb" onclick="showPage('clients')">Clientes</button>
+      <button class="nb" onclick="showPage('alerts')">🔔 Alertas</button>
+      <button class="nb" onclick="showPage('bills')">💳 Contas</button>
       <button class="nb" onclick="showPage('settings')">Configurações</button>
     </div>
     <div class="sy"><span class="sd" id="sd"></span><span id="st">Conectando...</span></div>
@@ -231,6 +233,7 @@ table tr:hover td{background:var(--b2);}
             <button class="btn sm" onclick="clearReportFilter()">Limpar</button>
           </div>
           <button class="btn p" onclick="printFinancialReport()">🖨 Exportar relatório financeiro</button>
+          <button class="btn" onclick="exportToQuickBooks()" style="border-color:#2ca01c;color:#2ca01c">⬇ Exportar para QuickBooks</button>
         </div>
       </div>
       <div class="sr" id="rsr"></div>
@@ -252,6 +255,25 @@ table tr:hover td{background:var(--b2);}
         <button class="btn p" onclick="openClientModal()">+ Nova Empresa</button>
       </div>
       <div id="clients-list"></div>
+    </div>
+
+    <!-- ALERTAS -->
+    <div id="page-alerts" class="hidden">
+      <div style="margin-bottom:16px">
+        <div style="font-size:15px;font-weight:500;margin-bottom:4px">🔔 Central de Alertas</div>
+        <div style="font-size:12px;color:var(--t2)">Invoices vencidas, próximas do vencimento e contas a pagar</div>
+      </div>
+      <div id="alerts-content"></div>
+    </div>
+
+    <!-- CONTAS A PAGAR -->
+    <div id="page-bills" class="hidden">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <span style="font-size:13px;color:var(--t2)">Contas e despesas da empresa</span>
+        <button class="btn p" onclick="openBillModal()">+ Nova Conta</button>
+      </div>
+      <div class="sr" id="bills-stats"></div>
+      <div id="bills-list"></div>
     </div>
 
     <!-- CONFIGURAÇÕES -->
@@ -373,6 +395,7 @@ table tr:hover td{background:var(--b2);}
     <div class="fg">
       <div class="fi"><label>Número *</label><input id="inum"></div>
       <div class="fi"><label>Data</label><input id="idat" type="date"></div>
+      <div class="fi"><label>Data de vencimento</label><input id="idue" type="date"></div>
       <div class="fi"><label>Customer ID</label><input id="icid"></div>
       <div class="fi"><label>Pagamento</label><select id="ipt"><option value="installments">Parcelado 3x</option><option value="due30">Net 30</option><option value="due15">Net 15</option><option value="immediate">À vista</option><option value="custom">Personalizado</option></select></div>
     </div>
@@ -491,6 +514,49 @@ table tr:hover td{background:var(--b2);}
 </div>
 
 
+<!-- MODAL CONTA A PAGAR -->
+<div id="bill-modal" class="mb hidden">
+  <div class="mo" style="width:min(540px,96vw)">
+    <h3 id="bill-modal-title">Nova Conta</h3>
+    <div class="fg">
+      <div class="fi" style="grid-column:span 2"><label>Descrição *</label><input id="bill-desc" placeholder="ex: Aluguel do armazém, Fornecedor XYZ..."></div>
+      <div class="fi"><label>Categoria</label>
+        <select id="bill-cat">
+          <option value="rent">Aluguel</option>
+          <option value="supplier">Fornecedor</option>
+          <option value="util">Utilidades</option>
+          <option value="tax">Impostos</option>
+          <option value="freight">Frete / Transporte</option>
+          <option value="salary">Salário</option>
+          <option value="other">Outro</option>
+        </select>
+      </div>
+      <div class="fi"><label>Valor ($)</label><input id="bill-amount" type="number" min="0" step="0.01"></div>
+      <div class="fi"><label>Data de vencimento *</label><input id="bill-due" type="date"></div>
+      <div class="fi"><label>Recorrência</label>
+        <select id="bill-recur">
+          <option value="once">Única vez</option>
+          <option value="monthly">Mensal</option>
+          <option value="weekly">Semanal</option>
+          <option value="yearly">Anual</option>
+        </select>
+      </div>
+      <div class="fi"><label>Status</label>
+        <select id="bill-status">
+          <option value="pending">Pendente</option>
+          <option value="paid">Pago</option>
+        </select>
+      </div>
+      <div class="fi"><label>Pago em</label><input id="bill-paid-date" type="date"></div>
+    </div>
+    <div class="fi" style="margin-top:8px"><label>Observações</label><textarea id="bill-obs" placeholder="Notas adicionais..."></textarea></div>
+    <div class="ma">
+      <button class="btn" onclick="closeM('bill-modal')">Cancelar</button>
+      <button class="btn p" onclick="saveBill()">Salvar</button>
+    </div>
+  </div>
+</div>
+
 <script>
 var SB='https://plsgcaiqmltljytchvvt.supabase.co';
 var SK='sb_publishable_QexQ4PIBOved8ajDR42xqQ_UbzeLhYL';
@@ -515,7 +581,7 @@ async function sbU(t,id,d){var r=await fetch(SB+'/rest/v1/'+t+'?id=eq.'+id,{meth
 async function sbD(t,id){var r=await fetch(SB+'/rest/v1/'+t+'?id=eq.'+id,{method:'DELETE',headers:H});if(!r.ok)throw new Error(await r.text());}
 async function sbUpsert(t,d){var r=await fetch(SB+'/rest/v1/'+t,{method:'POST',headers:Object.assign({},H,{'Prefer':'resolution=merge-duplicates'}),body:JSON.stringify(d)});if(!r.ok)throw new Error(await r.text());return r.json();}
 
-var slabs=[],invoices=[],clients=[],locs=['Meta Surface','ZTX Surfaces','Pacific Shore','Hope Solutions','Escritório'];
+var slabs=[],invoices=[],clients=[],bills=[],locs=['Meta Surface','ZTX Surfaces','Pacific Shore','Hope Solutions','Escritório'];
 var editId=null,editInvId=null,editClientId=null,selLoc=null,selIds=[],curPhoto=null,eic=0;
 var cfg={name:'DILEAN MARBLES CORP',addr:'1661 E Sample Rd, Pompano Beach FL 33064',phone:'346 455 8150',email:'',bank:'Bank Of America, N.A.',acct:'8981 6729 0208',wire:'063100277',swift:'BOFAUS6S',zelle:'346 455 8150',bankAddr:'555 California St., San Francisco, CA 94104'};
 
@@ -575,12 +641,13 @@ async function init(){
         if(s.key==='locations'&&s.value)locs=s.value;
         if(s.key==='config'&&s.value)Object.assign(cfg,s.value);
         if(s.key==='clients'&&s.value)clients=s.value;
+        if(s.key==='bills'&&s.value)bills=s.value;
       });
     }
     sync('ok','Sincronizado '+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}));
     document.getElementById('loading-screen').classList.add('hidden');
     document.getElementById('page-inventory').classList.remove('hidden');
-    rebuildSels();renderStats();renderTable();loadSettingsForm();
+    rebuildSels();renderStats();renderTable();loadSettingsForm();renderAlerts();
   }catch(e){
     if(e.message&&e.message.includes('does not exist')){showSetup();return;}
     sync('err','Erro de conexão');
@@ -1031,7 +1098,7 @@ function renderInvoices(){
       '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">'+
       '<button class="btn sm p" onclick="prevInv(\''+inv.id+'\')">🖨 Invoice</button>'+
       '<button class="btn sm wn" onclick="editInv(\''+inv.id+'\')">✏ Editar</button>'+
-      '<button class="btn sm" onclick="regP(\''+inv.id+'\')">💰 Pagamento</button>'+
+        '<button class="btn sm" style="margin-top:4px;border-color:#a32d2d;color:#a32d2d" onclick="regP(this.dataset.id)" data-id="'+inv.id+'">Registrar pagamento</button>'+
       '<button class="btn sm dn" onclick="delInv(\''+inv.id+'\')">Excluir</button></div></div>';
   }).join('');
 }
@@ -1067,6 +1134,7 @@ function openIM(invId){
   // número
   document.getElementById('inum').value=inv?inv.num:'INV-2026-'+String(invoices.length+1).padStart(3,'0');
   document.getElementById('idat').value=inv?inv.date:new Date().toISOString().slice(0,10);
+  if(document.getElementById('idue'))document.getElementById('idue').value=inv?inv.due_date||'':'';
   document.getElementById('icid').value=inv?inv.cust_id||'':'';
   document.getElementById('ipt').value=inv?inv.pay_type||'installments':'installments';
   document.getElementById('iptx').value=inv?inv.pay_text||'':'';
@@ -1142,7 +1210,8 @@ async function saveInv(){
   var num=document.getElementById('inum').value.trim(),client=document.getElementById('icli').value.trim();
   if(!num||!client){alert('Número e cliente são obrigatórios.');return;}
   var inv={id:editInvId||uid(),num:num,client:client,client_addr:document.getElementById('icla').value.trim(),
-    date:document.getElementById('idat').value,total:parseFloat(document.getElementById('itot').value)||0,
+    date:document.getElementById('idat').value,
+    due_date:document.getElementById('idue')?document.getElementById('idue').value:null,total:parseFloat(document.getElementById('itot').value)||0,
     paid:parseFloat(document.getElementById('ipai').value)||0,status:document.getElementById('istat').value,
     slab_ids:selIds,extra_items:getEIs(),
     show_slab_details:document.getElementById('show-slab-details').checked,
@@ -1792,15 +1861,378 @@ function getFilteredInvoices(){
   });
 }
 
+function exportToQuickBooks(){
+  var printInvs = getFilteredInvoices();
+  if(!printInvs.length){alert('Nenhuma invoice no período selecionado.');return;}
+
+  // QuickBooks Online IIF format for invoices
+  // Header row
+  var rows = [];
+
+  // CSV format compatible with QuickBooks Online import
+  rows.push([
+    'InvoiceNo',
+    'Customer',
+    'InvoiceDate',
+    'DueDate',
+    'Item(Product/Service)',
+    'ItemDescription',
+    'ItemQuantity',
+    'ItemRate',
+    'ItemAmount',
+    'TaxCode',
+    'Currency',
+    'AmountPaid',
+    'PaymentStatus'
+  ].join(','));
+
+  printInvs.forEach(function(inv){
+    var sids = inv.slab_ids || [];
+    var chapas = sids.map(function(id){return slabs.find(function(s){return s.id===id;});}).filter(Boolean);
+    var extras = inv.extra_items || [];
+    var date = inv.date || '';
+    var client = '"' + (inv.client||'').replace(/"/g,'""') + '"';
+    var status = inv.status==='paid'?'Paid':inv.status==='partial'?'Partial':'Unpaid';
+
+    // Group chapas by material
+    var groups = {};
+    chapas.forEach(function(s){
+      var key = s.material + '||' + (s.price_per_sqft||0);
+      if(!groups[key])groups[key]={material:s.material,price:s.price_per_sqft||0,sqfts:[],total:0};
+      var sf = (s.width&&s.height)?+((s.width*s.height)/144).toFixed(2):0;
+      groups[key].sqfts.push(sf);
+      groups[key].total += sf*(s.price_per_sqft||0);
+    });
+
+    var isFirst = true;
+    Object.values(groups).forEach(function(g){
+      var ts = g.sqfts.reduce(function(a,b){return a+b;},0);
+      var desc = '"Slabs of ' + g.material + ' - ' + g.sqfts.length + ' slabs - ' + ts.toFixed(2) + ' sqft @ $' + g.price + '/sqft"';
+      rows.push([
+        '"'+inv.num+'"',
+        client,
+        date,
+        date,
+        '"Stone Slabs"',
+        desc,
+        g.sqfts.length,
+        g.price.toFixed(2),
+        g.total.toFixed(2),
+        'NON',
+        'USD',
+        isFirst ? inv.paid.toFixed(2) : '0.00',
+        isFirst ? status : ''
+      ].join(','));
+      isFirst = false;
+    });
+
+    // Extra items
+    extras.forEach(function(item){
+      rows.push([
+        '"'+inv.num+'"',
+        client,
+        date,
+        date,
+        '"Other"',
+        '"'+(item.desc||'').replace(/"/g,'""')+'"',
+        item.qty||1,
+        (item.unit||0).toFixed(2),
+        (item.amt||0).toFixed(2),
+        'NON',
+        'USD',
+        '0.00',
+        ''
+      ].join(','));
+    });
+
+    // If no items, add one row with total
+    if(!chapas.length && !extras.length){
+      rows.push([
+        '"'+inv.num+'"',
+        client,
+        date,
+        date,
+        '"Stone Slabs"',
+        '"Invoice '+inv.num+'"',
+        1,
+        inv.total.toFixed(2),
+        inv.total.toFixed(2),
+        'NON',
+        'USD',
+        inv.paid.toFixed(2),
+        status
+      ].join(','));
+    }
+  });
+
+  var csv = rows.join('\n');
+  var blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  var a = document.createElement('a');
+  var from = document.getElementById('report-from').value;
+  var to = document.getElementById('report-to').value;
+  var period = (from&&to) ? '_'+from+'_a_'+to : '_completo';
+  a.href = URL.createObjectURL(blob);
+  a.download = 'dilean_quickbooks'+period+'.csv';
+  a.click();
+  alert('Arquivo CSV gerado! Agora importe no QuickBooks conforme o passo a passo.');
+}
+
+// ── BILLS (CONTAS A PAGAR) ────────────────────────────
+var editBillId = null;
+var CAT_LABELS = {rent:'Aluguel',supplier:'Fornecedor',util:'Utilidades',tax:'Impostos',freight:'Frete/Transporte',salary:'Salário',other:'Outro'};
+var CAT_COLORS = {rent:'#185fa5',supplier:'#2a6049',util:'#854f0b',tax:'#a32d2d',freight:'#6b3fa0',salary:'#b85a1a',other:'#6b6b67'};
+
+function openBillModal(id){
+  editBillId = id||null;
+  var b = id?bills.find(function(x){return x.id===id;}):null;
+  document.getElementById('bill-modal-title').textContent = b?'Editar Conta':'Nova Conta';
+  document.getElementById('bill-desc').value = b?b.desc||'':'';
+  document.getElementById('bill-cat').value = b?b.cat||'other':'other';
+  document.getElementById('bill-amount').value = b?b.amount||'':'';
+  document.getElementById('bill-due').value = b?b.due||'':'';
+  document.getElementById('bill-recur').value = b?b.recur||'once':'once';
+  document.getElementById('bill-status').value = b?b.status||'pending':'pending';
+  document.getElementById('bill-paid-date').value = b?b.paidDate||'':'';
+  document.getElementById('bill-obs').value = b?b.obs||'':'';
+  document.getElementById('bill-modal').classList.remove('hidden');
+}
+
+async function saveBill(){
+  var desc = document.getElementById('bill-desc').value.trim();
+  var due = document.getElementById('bill-due').value;
+  if(!desc||!due){alert('Descrição e data de vencimento são obrigatórios.');return;}
+  var b = {
+    id: editBillId||uid(),
+    desc: desc,
+    cat: document.getElementById('bill-cat').value,
+    amount: parseFloat(document.getElementById('bill-amount').value)||0,
+    due: due,
+    recur: document.getElementById('bill-recur').value,
+    status: document.getElementById('bill-status').value,
+    paidDate: document.getElementById('bill-paid-date').value||null,
+    obs: document.getElementById('bill-obs').value.trim()
+  };
+  if(editBillId) bills=bills.map(function(x){return x.id===editBillId?b:x;});
+  else bills.push(b);
+  sync('spin','Salvando...');
+  await saveSetting('bills', bills);
+  sync('ok','Salvo');
+  closeM('bill-modal');
+  renderBills();
+  renderAlerts();
+}
+
+async function deleteBill(id){
+  if(!confirm('Excluir esta conta?'))return;
+  bills = bills.filter(function(x){return x.id!==id;});
+  await saveSetting('bills', bills);
+  renderBills();
+  renderAlerts();
+}
+
+async function toggleBillPaid(id){
+  var b = bills.find(function(x){return x.id===id;});if(!b)return;
+  b.status = b.status==='paid'?'pending':'paid';
+  b.paidDate = b.status==='paid'?new Date().toISOString().slice(0,10):null;
+  await saveSetting('bills', bills);
+  renderBills();
+  renderAlerts();
+}
+
+function renderBills(){
+  var today = new Date().toISOString().slice(0,10);
+  var pending = bills.filter(function(b){return b.status!=='paid';});
+  var paid = bills.filter(function(b){return b.status==='paid';});
+  var overdue = pending.filter(function(b){return b.due<today;});
+  var totalPending = pending.reduce(function(a,b){return a+b.amount;},0);
+  var totalPaid = paid.reduce(function(a,b){return a+b.amount;},0);
+
+  document.getElementById('bills-stats').innerHTML =
+    '<div class="sc"><div class="sl">Total pendente</div><div class="sv r">'+fmt(totalPending)+'</div></div>'+
+    '<div class="sc"><div class="sl">Vencidas</div><div class="sv r">'+overdue.length+'</div></div>'+
+    '<div class="sc"><div class="sl">A vencer</div><div class="sv am">'+(pending.length-overdue.length)+'</div></div>'+
+    '<div class="sc"><div class="sl">Pagas (total)</div><div class="sv g">'+fmt(totalPaid)+'</div></div>';
+
+  var el = document.getElementById('bills-list');
+  if(!bills.length){el.innerHTML='<div class="empty">Nenhuma conta cadastrada.</div>';return;}
+
+  // Sort: overdue first, then by due date
+  var sorted = bills.slice().sort(function(a,b){
+    if(a.status==='paid'&&b.status!=='paid')return 1;
+    if(a.status!=='paid'&&b.status==='paid')return-1;
+    return a.due.localeCompare(b.due);
+  });
+
+  el.innerHTML = sorted.map(function(b){
+    var isOverdue = b.status!=='paid'&&b.due<today;
+    var daysLeft = Math.round((new Date(b.due)-new Date(today))/(1000*60*60*24));
+    var dueLbl = b.status==='paid'?'✅ Pago em '+(b.paidDate||''):
+      isOverdue?'🔴 Vencida há '+Math.abs(daysLeft)+' dia'+(Math.abs(daysLeft)>1?'s':''):
+      daysLeft===0?'⚠️ Vence hoje':
+      daysLeft<=7?'⚠️ Vence em '+daysLeft+' dia'+(daysLeft>1?'s':''):
+      '📅 Vence em '+b.due;
+    var borderColor = b.status==='paid'?'var(--br1)':isOverdue?'#f09595':daysLeft<=7?'#fac775':'var(--br1)';
+    return '<div class="ic" style="border-color:'+borderColor+'">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">'+
+      '<div>'+
+      '<div style="font-weight:500;font-size:13px">'+b.desc+'</div>'+
+      '<div style="font-size:11px;margin-top:3px">'+
+      '<span style="padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600;background:var(--b2);color:'+(CAT_COLORS[b.cat]||'var(--t2)')+'">'+( CAT_LABELS[b.cat]||b.cat)+'</span>'+
+      (b.recur!=='once'?' · '+{monthly:'Mensal',weekly:'Semanal',yearly:'Anual'}[b.recur]:'')+'</div>'+
+      '<div style="font-size:12px;color:var(--t2);margin-top:4px">'+dueLbl+'</div>'+
+      (b.obs?'<div style="font-size:11px;color:var(--t2);margin-top:3px">'+b.obs+'</div>':'')+
+      '</div>'+
+      '<div style="text-align:right;flex-shrink:0">'+
+      '<div style="font-size:18px;font-weight:600;color:'+(b.status==='paid'?'var(--a)':'var(--d)')+'">'+fmt(b.amount)+'</div>'+
+      '<div style="display:flex;gap:5px;margin-top:8px;justify-content:flex-end">'+
+      '<button class="btn sm '+(b.status==="paid"?"":"p")+'" onclick="toggleBillPaid(this.dataset.id)" data-id="'+b.id+'">'+(b.status==="paid"?"Reabrir":"✓ Pago")+"</button>"+
+      '<button class="btn sm" onclick="openBillModal(this.dataset.id)" data-id="'+b.id+'">Editar</button>'+
+      '<button class="btn sm dn" onclick="deleteBill(this.dataset.id)" data-id="'+b.id+'">✕</button>'+
+      '</div></div></div></div>';
+  }).join('');
+}
+
+// ── ALERTS ────────────────────────────────────────────
+function renderAlerts(){
+  var today = new Date().toISOString().slice(0,10);
+  var in7 = new Date(); in7.setDate(in7.getDate()+7); in7 = in7.toISOString().slice(0,10);
+  var in30 = new Date(); in30.setDate(in30.getDate()+30); in30 = in30.toISOString().slice(0,10);
+  var el = document.getElementById('alerts-content');
+  var html = '';
+  var count = 0;
+
+  // ── Invoices vencidas
+  var overdueInvs = invoices.filter(function(i){
+    return i.status!=='paid' && i.due_date && i.due_date < today;
+  });
+  // Also check invoices without due_date but older than 30 days
+  var oldInvs = invoices.filter(function(i){
+    return i.status!=='paid' && !i.due_date && i.date && i.date < new Date(Date.now()-30*24*60*60*1000).toISOString().slice(0,10);
+  });
+
+  if(overdueInvs.length||oldInvs.length){
+    count += overdueInvs.length + oldInvs.length;
+    html += '<div style="background:#fff5f5;border:.5px solid #f09595;border-radius:var(--rl);padding:14px;margin-bottom:12px">'+
+      '<div style="font-weight:600;font-size:13px;color:#a32d2d;margin-bottom:10px">🔴 Invoices vencidas — cobrança necessária ('+( overdueInvs.length+oldInvs.length)+')</div>';
+    overdueInvs.concat(oldInvs).forEach(function(inv){
+      var saldo = inv.total - inv.paid;
+      var daysAgo = inv.due_date ? Math.round((new Date(today)-new Date(inv.due_date))/(1000*60*60*24)) : '30+';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:.5px solid #f5c0c0">'+
+        '<div>'+
+        '<div style="font-weight:500;font-size:13px">'+inv.client+' — '+inv.num+'</div>'+
+        '<div style="font-size:11px;color:#a32d2d">Vencida há '+daysAgo+' dia'+(daysAgo>1?'s':'')+' · Data: '+(inv.due_date||inv.date||'—')+'</div>'+
+        '</div>'+
+        '<div style="text-align:right">'+
+        '<div style="font-weight:600;color:#a32d2d">'+fmt(saldo)+'</div>'+
+        '<button class="btn sm" style="margin-top:4px;border-color:#a32d2d;color:#a32d2d" onclick="regP(this.dataset.id)" data-id="'+inv.id+'">Registrar pagamento</button>'+
+        '</div></div>';
+    });
+    html += '</div>';
+  }
+
+  // ── Invoices próximas do vencimento (7 dias)
+  var soonInvs = invoices.filter(function(i){
+    return i.status!=='paid' && i.due_date && i.due_date>=today && i.due_date<=in7;
+  });
+  if(soonInvs.length){
+    count += soonInvs.length;
+    html += '<div style="background:#fffbf0;border:.5px solid #fac775;border-radius:var(--rl);padding:14px;margin-bottom:12px">'+
+      '<div style="font-weight:600;font-size:13px;color:#854f0b;margin-bottom:10px">⚠️ Vencendo em até 7 dias ('+soonInvs.length+')</div>';
+    soonInvs.forEach(function(inv){
+      var saldo = inv.total-inv.paid;
+      var daysLeft = Math.round((new Date(inv.due_date)-new Date(today))/(1000*60*60*24));
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:.5px solid #fde8b0">'+
+        '<div>'+
+        '<div style="font-weight:500;font-size:13px">'+inv.client+' — '+inv.num+'</div>'+
+        '<div style="font-size:11px;color:#854f0b">Vence em '+daysLeft+' dia'+(daysLeft>1?'s':'')+' ('+inv.due_date+')</div>'+
+        '</div>'+
+        '<div style="font-weight:600;color:#854f0b">'+fmt(saldo)+'</div></div>';
+    });
+    html += '</div>';
+  }
+
+  // ── Contas a pagar vencidas
+  var overdueBills = bills.filter(function(b){return b.status!=='paid'&&b.due<today;});
+  if(overdueBills.length){
+    count += overdueBills.length;
+    html += '<div style="background:#fff5f5;border:.5px solid #f09595;border-radius:var(--rl);padding:14px;margin-bottom:12px">'+
+      '<div style="font-weight:600;font-size:13px;color:#a32d2d;margin-bottom:10px">🔴 Contas vencidas ('+overdueBills.length+')</div>';
+    overdueBills.forEach(function(b){
+      var daysAgo = Math.round((new Date(today)-new Date(b.due))/(1000*60*60*24));
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:.5px solid #f5c0c0">'+
+        '<div>'+
+        '<div style="font-weight:500;font-size:13px">'+b.desc+'</div>'+
+        '<div style="font-size:11px;color:#a32d2d">Vencida há '+daysAgo+' dia'+(daysAgo>1?'s':'')+' ('+b.due+')</div>'+
+        '</div>'+
+        '<div style="text-align:right">'+
+        '<div style="font-weight:600;color:#a32d2d">'+fmt(b.amount)+'</div>'+
+        '<button class="btn sm p" style="margin-top:4px" onclick="toggleBillPaid(this.dataset.id)" data-id="'+b.id+'">✓ Marcar pago</button>'+
+        '</div></div>';
+    });
+    html += '</div>';
+  }
+
+  // ── Contas a pagar próximas (7 dias)
+  var soonBills = bills.filter(function(b){return b.status!=='paid'&&b.due>=today&&b.due<=in7;});
+  if(soonBills.length){
+    count += soonBills.length;
+    html += '<div style="background:#fffbf0;border:.5px solid #fac775;border-radius:var(--rl);padding:14px;margin-bottom:12px">'+
+      '<div style="font-weight:600;font-size:13px;color:#854f0b;margin-bottom:10px">⚠️ Contas vencendo em até 7 dias ('+soonBills.length+')</div>';
+    soonBills.forEach(function(b){
+      var daysLeft = Math.round((new Date(b.due)-new Date(today))/(1000*60*60*24));
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:.5px solid #fde8b0">'+
+        '<div>'+
+        '<div style="font-weight:500;font-size:13px">'+b.desc+'</div>'+
+        '<div style="font-size:11px;color:#854f0b">Vence em '+daysLeft+' dia'+(daysLeft>1?'s':'')+' ('+b.due+')</div>'+
+        '</div>'+
+        '<div style="font-weight:600;color:#854f0b">'+fmt(b.amount)+'</div></div>';
+    });
+    html += '</div>';
+  }
+
+  // ── Próximos 30 dias
+  var next30Bills = bills.filter(function(b){return b.status!=='paid'&&b.due>in7&&b.due<=in30;});
+  if(next30Bills.length){
+    html += '<div style="background:var(--b2);border:.5px solid var(--br1);border-radius:var(--rl);padding:14px;margin-bottom:12px">'+
+      '<div style="font-weight:600;font-size:13px;color:var(--t2);margin-bottom:10px">📅 Próximos 30 dias ('+next30Bills.length+')</div>';
+    next30Bills.forEach(function(b){
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:.5px solid var(--br1)">'+
+        '<div><div style="font-weight:500;font-size:13px">'+b.desc+'</div>'+
+        '<div style="font-size:11px;color:var(--t2)">Vence em '+b.due+'</div></div>'+
+        '<div style="font-weight:500">'+fmt(b.amount)+'</div></div>';
+    });
+    html += '</div>';
+  }
+
+  if(!count && !next30Bills.length){
+    html = '<div style="text-align:center;padding:48px;color:var(--t2)">'+
+      '<div style="font-size:40px;margin-bottom:12px">✅</div>'+
+      '<div style="font-size:15px;font-weight:500">Tudo em dia!</div>'+
+      '<div style="font-size:13px;margin-top:6px">Nenhum alerta pendente no momento.</div></div>';
+  }
+
+  // Alert badge on nav button
+  var alertBtn = document.querySelector('.nb[onclick*="alerts"]');
+  if(alertBtn){
+    alertBtn.textContent = count>0?'🔔 Alertas ('+count+')':'🔔 Alertas';
+    if(count>0)alertBtn.style.color='#a32d2d';
+    else alertBtn.style.color='';
+  }
+
+  el.innerHTML = html;
+}
+
 function closeM(id){document.getElementById(id).classList.add('hidden');}
 document.querySelectorAll('.mb').forEach(function(m){m.addEventListener('click',function(e){if(e.target===m)m.classList.add('hidden');});});
 function showPage(p){
-  ['inventory','visual','invoices','report','clients','settings'].forEach(function(pg){document.getElementById('page-'+pg).classList.toggle('hidden',pg!==p);});
-  document.querySelectorAll('.nb').forEach(function(b,i){b.classList.toggle('active',['inventory','visual','invoices','report','clients','settings'][i]===p);});
+  ['inventory','visual','invoices','report','clients','alerts','bills','settings'].forEach(function(pg){document.getElementById('page-'+pg).classList.toggle('hidden',pg!==p);});
+  document.querySelectorAll('.nb').forEach(function(b,i){b.classList.toggle('active',['inventory','visual','invoices','report','clients','alerts','bills','settings'][i]===p);});
   if(p==='visual')renderVis();
   if(p==='invoices')renderInvoices();
   if(p==='report')renderReport();
   if(p==='clients')renderClientsList();
+  if(p==='alerts')renderAlerts();
+  if(p==='bills')renderBills();
   if(p==='settings')loadSettingsForm();
 }
 
