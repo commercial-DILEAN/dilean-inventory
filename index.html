@@ -154,6 +154,7 @@ table tr:hover td{background:var(--b2);}
       <button class="nb" onclick="showPage('invoices')">Faturamento</button>
       <button class="nb" onclick="showPage('report')">Relatório</button>
       <button class="nb" onclick="showPage('clients')">Clientes</button>
+      <button class="nb" onclick="showPage('transfer')">📋 Transfer</button>
       <button class="nb" onclick="showPage('alerts')">🔔 Alertas</button>
       <button class="nb" onclick="showPage('bills')">💳 Contas</button>
       <button class="nb" onclick="showPage('settings')">Configurações</button>
@@ -255,6 +256,62 @@ table tr:hover td{background:var(--b2);}
         <button class="btn p" onclick="openClientModal()">+ Nova Empresa</button>
       </div>
       <div id="clients-list"></div>
+    </div>
+
+    <!-- MATERIAL TRANSFER -->
+    <div id="page-transfer" class="hidden">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+        <div>
+          <div style="font-size:15px;font-weight:500">Material Transfer Sheet</div>
+          <div style="font-size:12px;color:var(--t2)">Gere o documento de transferência de material para consignação</div>
+        </div>
+        <button class="btn p" onclick="printTransfer()">🖨 Gerar Transfer Sheet</button>
+      </div>
+
+      <div class="fg" style="margin-bottom:16px;max-width:700px">
+        <div class="fi"><label>De (From)</label><input id="tr-from-name" placeholder="DILEAN MARBLES"></div>
+        <div class="fi"><label>Endereço From</label><input id="tr-from-addr" placeholder="14730 Yarberry St, Unit C"></div>
+        <div class="fi"><label>Cidade/Estado/ZIP From</label><input id="tr-from-city" placeholder="Houston, TX 77039"></div>
+        <div class="fi"><label>Data</label><input id="tr-date" type="date"></div>
+      </div>
+
+      <div class="sec" style="display:flex;justify-content:space-between;align-items:center">
+        <span>Para (To) — Empresa destinatária</span>
+        <select id="tr-client-sel" onchange="fillTransferClient()" style="font-size:12px;padding:4px 8px;border:.5px solid var(--br1);border-radius:var(--r);background:var(--b1);color:var(--t1)">
+          <option value="">— Selecionar empresa —</option>
+        </select>
+      </div>
+      <div class="fg" style="margin-bottom:16px;max-width:700px">
+        <div class="fi"><label>Nome / Empresa *</label><input id="tr-to-name" placeholder="META SURFACES INC TRADE"></div>
+        <div class="fi"><label>Endereço To</label><input id="tr-to-addr" placeholder="7206 Harms Rd"></div>
+        <div class="fi"><label>Cidade/Estado/ZIP To</label><input id="tr-to-city" placeholder="Houston, TX 77041"></div>
+      </div>
+
+      <div class="sec">Selecionar Chapas</div>
+      <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+        <input id="tr-lot-s" placeholder="Filtrar lote..." style="flex:1;min-width:100px;padding:6px 10px;border:.5px solid var(--br1);border-radius:var(--r);font-size:12px;background:var(--b1);color:var(--t1)" oninput="renderTransferChips()">
+        <input id="tr-mat-s" placeholder="Filtrar material..." style="flex:1;min-width:100px;padding:6px 10px;border:.5px solid var(--br1);border-radius:var(--r);font-size:12px;background:var(--b1);color:var(--t1)" oninput="renderTransferChips()">
+        <select id="tr-loc-s" onchange="renderTransferChips()" style="padding:6px 10px;border:.5px solid var(--br1);border-radius:var(--r);font-size:12px;background:var(--b1);color:var(--t1)">
+          <option value="">Todos os locais</option>
+        </select>
+        <button class="btn sm" onclick="selectAllVisible()">Selecionar todos visíveis</button>
+        <button class="btn sm dn" onclick="clearTransferSel()">Limpar seleção</button>
+      </div>
+      <div id="tr-chips" class="cr" style="min-height:40px;padding:8px;border:.5px solid var(--br1);border-radius:var(--r);margin-bottom:8px"></div>
+      <div id="tr-sel-info" style="font-size:12px;color:var(--t2);margin-bottom:12px"></div>
+
+      <div class="sec">Informações adicionais</div>
+      <div class="fg" style="max-width:700px;margin-bottom:16px">
+        <div class="fi"><label>Nome do Shipper</label><input id="tr-shipper" placeholder="Nome do responsável"></div>
+        <div class="fi"><label>Nome do Driver</label><input id="tr-driver" placeholder="Nome do motorista"></div>
+        <div class="fi" style="grid-column:span 2"><label>Informações adicionais</label><textarea id="tr-notes" placeholder="Observações, instruções especiais..."></textarea></div>
+      </div>
+
+      <!-- Preview -->
+      <div class="sec">Preview</div>
+      <div id="tr-preview" style="border:.5px solid var(--br1);border-radius:var(--rl);padding:16px;background:var(--b2);min-height:100px">
+        <div style="color:var(--t2);font-size:12px;text-align:center;padding:20px">Selecione as chapas acima para ver o preview</div>
+      </div>
     </div>
 
     <!-- ALERTAS -->
@@ -1751,7 +1808,43 @@ function printSlabReport(){
     '</div></div>';
 
   document.getElementById('print-area').innerHTML = html;
-  window.print();
+
+  // Ask if should update slab locations
+  var newLoc = toName;
+  if(confirm('Transfer Sheet gerado!\n\nDeseja atualizar o local das ' + data.total + ' chapa(s) para "' + newLoc + '" no estoque?')){
+    updateSlabLocations(newLoc);
+  } else {
+    window.print();
+  }
+}
+
+async function updateSlabLocations(newLoc){
+  sync('spin', 'Atualizando locais...');
+  try{
+    // Add new location if not exists
+    if(getAllLocs().indexOf(newLoc)===-1){
+      locs.push(newLoc);
+      await saveSetting('locations', locs);
+      rebuildSels();
+    }
+    // Update each selected slab
+    for(var i=0;i<trSelIds.length;i++){
+      var sid = trSelIds[i];
+      var s = slabs.find(function(x){return x.id===sid;});
+      if(!s)continue;
+      s.location = newLoc;
+      await sbU('slabs', sid, {location: newLoc});
+    }
+    sync('ok', 'Locais atualizados!');
+    renderTable();
+    renderStats();
+    alert('✅ ' + trSelIds.length + ' chapa(s) transferida(s) para "' + newLoc + '" com sucesso!\n\nAgora vou imprimir o documento.');
+    window.print();
+  } catch(e){
+    sync('err', 'Erro ao atualizar');
+    alert('Erro ao atualizar locais: ' + e.message);
+    window.print();
+  }
 }
 
 function printVisualReport(){
@@ -2222,15 +2315,313 @@ function renderAlerts(){
   el.innerHTML = html;
 }
 
+// ── MATERIAL TRANSFER SHEET ───────────────────────────
+var trSelIds = [];
+
+function initTransferPage(){
+  // Fill defaults from cfg
+  document.getElementById('tr-from-name').value = cfg.name||'DILEAN MARBLES';
+  document.getElementById('tr-from-addr').value = cfg.addr||'14730 Yarberry St, Unit C - Hope Solutions Management';
+  document.getElementById('tr-from-city').value = 'Houston, TX 77039';
+  document.getElementById('tr-date').value = new Date().toISOString().slice(0,10);
+  // Fill location select
+  var locSel = document.getElementById('tr-loc-s');
+  locSel.innerHTML = '<option value="">Todos os locais</option>';
+  getAllLocs().forEach(function(l){
+    var o=document.createElement('option');o.value=l;o.textContent=l;locSel.appendChild(o);
+  });
+  // Fill client select
+  var cliSel = document.getElementById('tr-client-sel');
+  cliSel.innerHTML = '<option value="">— Selecionar empresa —</option>';
+  clients.forEach(function(c){
+    var o=document.createElement('option');o.value=c.id;o.textContent=c.name;cliSel.appendChild(o);
+  });
+  renderTransferChips();
+}
+
+function fillTransferClient(){
+  var id = document.getElementById('tr-client-sel').value;
+  if(!id){
+    document.getElementById('tr-to-name').value='';
+    document.getElementById('tr-to-addr').value='';
+    document.getElementById('tr-to-city').value='';
+    return;
+  }
+  var c = clients.find(function(x){return x.id===id;});
+  if(!c)return;
+  document.getElementById('tr-to-name').value = c.name||'';
+  var addr = c.addr||'';
+  // Try to split address into street and city/state/zip
+  var commaIdx = addr.indexOf(',');
+  if(commaIdx>0){
+    document.getElementById('tr-to-addr').value = addr.substring(0,commaIdx).trim();
+    document.getElementById('tr-to-city').value = addr.substring(commaIdx+1).trim();
+  } else {
+    document.getElementById('tr-to-addr').value = addr;
+    document.getElementById('tr-to-city').value = c.city||'';
+  }
+  renderTransferPreview();
+}
+
+function renderTransferChips(){
+  var ls = (document.getElementById('tr-lot-s').value||'').toLowerCase();
+  var ms = (document.getElementById('tr-mat-s').value||'').toLowerCase();
+  var loc = document.getElementById('tr-loc-s').value;
+  var pool = slabs.filter(function(s){
+    return (!ls||s.lot.toLowerCase().includes(ls)) &&
+           (!ms||s.material.toLowerCase().includes(ms)) &&
+           (!loc||s.location===loc);
+  }).slice(0,80);
+  document.getElementById('tr-chips').innerHTML = pool.map(function(s){
+    var sel = trSelIds.includes(s.id);
+    return '<span class="ch '+(sel?'sel':'')+' " onclick="togTr(this.dataset.id)" data-id="'+s.id+'" style="font-size:11px">'+s.lot+' #'+s.num+' '+s.material.split(' ')[0]+'<span style="font-size:10px;opacity:.7;margin-left:3px">'+(s.status==="available"?"✓":s.status==="consigned"?"⇄":"✗")+"</span></span>";
+      'L'+s.lot+' #'+s.num+' '+s.material.split(' ')[0]+
+      '<span style="font-size:10px;opacity:.7;margin-left:3px">'+(s.status==='available'?'✓':s.status==='consigned'?'⇄':'✗')+'</span>'+
+      '</span>';
+  }).join('');
+  updateTransferInfo();
+}
+
+function togTr(id){
+  trSelIds = trSelIds.includes(id)?trSelIds.filter(function(x){return x!==id;}):[...trSelIds,id];
+  renderTransferChips();
+  renderTransferPreview();
+}
+
+function selectAllVisible(){
+  var ls = (document.getElementById('tr-lot-s').value||'').toLowerCase();
+  var ms = (document.getElementById('tr-mat-s').value||'').toLowerCase();
+  var loc = document.getElementById('tr-loc-s').value;
+  var pool = slabs.filter(function(s){
+    return (!ls||s.lot.toLowerCase().includes(ls)) &&
+           (!ms||s.material.toLowerCase().includes(ms)) &&
+           (!loc||s.location===loc);
+  }).slice(0,80);
+  pool.forEach(function(s){if(!trSelIds.includes(s.id))trSelIds.push(s.id);});
+  renderTransferChips();
+  renderTransferPreview();
+}
+
+function clearTransferSel(){
+  trSelIds=[];
+  renderTransferChips();
+  renderTransferPreview();
+}
+
+function updateTransferInfo(){
+  var sel = trSelIds.map(function(id){return slabs.find(function(s){return s.id===id;});}).filter(Boolean);
+  document.getElementById('tr-sel-info').textContent = sel.length?sel.length+' chapa(s) selecionada(s)':'';
+}
+
+function buildTransferRows(){
+  var sel = trSelIds.map(function(id){return slabs.find(function(s){return s.id===id;});}).filter(Boolean);
+  if(!sel.length)return{rows:[],total:0};
+
+  // Group by lot + material + thickness
+  var groups = {};
+  sel.forEach(function(s){
+    var thick = s.type&&s.type.includes('cm')?s.type:(s.thickness||'');
+    var key = s.lot+'||'+s.material+'||'+thick;
+    if(!groups[key])groups[key]={lot:s.lot,material:s.material,thick:thick,nums:[],bundle:s.lot};
+    groups[key].nums.push(s.num);
+  });
+
+  var rows = Object.values(groups).sort(function(a,b){return a.lot.localeCompare(b.lot);});
+  var total = sel.length;
+  return{rows:rows, total:total};
+}
+
+function renderTransferPreview(){
+  var data = buildTransferRows();
+  if(!data.total){
+    document.getElementById('tr-preview').innerHTML='<div style="color:var(--t2);font-size:12px;text-align:center;padding:20px">Selecione as chapas acima para ver o preview</div>';
+    return;
+  }
+  var toName = document.getElementById('tr-to-name').value||'—';
+  var html = '<div style="font-size:12px"><strong>Para:</strong> '+toName+' &nbsp;|&nbsp; <strong>Total:</strong> '+data.total+' chapas<br><br>';
+  html += '<table style="width:100%;border-collapse:collapse;font-size:11px">';
+  html += '<thead><tr style="background:var(--b3)"><th style="padding:5px 8px;text-align:left;border:.5px solid var(--br1)">Block#/Bundle</th><th style="padding:5px 8px;text-align:left;border:.5px solid var(--br1)">Material</th><th style="padding:5px 8px;text-align:left;border:.5px solid var(--br1)">Slab#</th><th style="padding:5px 8px;text-align:center;border:.5px solid var(--br1)">Qnt</th><th style="padding:5px 8px;text-align:center;border:.5px solid var(--br1)">Thickness</th></tr></thead><tbody>';
+  data.rows.forEach(function(g){
+    var numsSorted = g.nums.slice().sort(function(a,b){return parseInt(a)-parseInt(b);});
+    html += '<tr><td style="padding:5px 8px;border:.5px solid var(--br1)">'+g.lot+'</td>'+
+      '<td style="padding:5px 8px;border:.5px solid var(--br1)">'+g.material+'</td>'+
+      '<td style="padding:5px 8px;border:.5px solid var(--br1)">'+numsSorted.join('-')+'</td>'+
+      '<td style="padding:5px 8px;border:.5px solid var(--br1);text-align:center">'+g.nums.length+'</td>'+
+      '<td style="padding:5px 8px;border:.5px solid var(--br1);text-align:center">'+( g.thick||'—')+'</td></tr>';
+  });
+  html += '</tbody></table></div>';
+  document.getElementById('tr-preview').innerHTML = html;
+}
+
+function printTransfer(){
+  var data = buildTransferRows();
+  if(!data.total){alert('Selecione pelo menos uma chapa.');return;}
+
+  var fromName = document.getElementById('tr-from-name').value||'DILEAN MARBLES';
+  var fromAddr = document.getElementById('tr-from-addr').value||'';
+  var fromCity = document.getElementById('tr-from-city').value||'';
+  var toName = document.getElementById('tr-to-name').value||'';
+  var toAddr = document.getElementById('tr-to-addr').value||'';
+  var toCity = document.getElementById('tr-to-city').value||'';
+  var trDate = document.getElementById('tr-date').value||'';
+  var shipper = document.getElementById('tr-shipper').value||'';
+  var driver = document.getElementById('tr-driver').value||'';
+  var notes = document.getElementById('tr-notes').value||'';
+
+  // Format date MM/DD/YYYY
+  var dateFormatted = trDate ? (function(){var p=trDate.split('-');return p[1]+'/'+p[2]+'/'+p[0];})() : '    /    /';
+
+  // Build rows
+  var tableRows = '';
+  data.rows.forEach(function(g){
+    var numsSorted = g.nums.slice().sort(function(a,b){return parseInt(a)-parseInt(b);});
+    tableRows += '<tr>'+
+      '<td style="padding:6px 10px;border:1px solid #cde3d6;font-size:11px">'+g.lot+'</td>'+
+      '<td style="padding:6px 10px;border:1px solid #cde3d6;font-size:11px">'+g.material+'</td>'+
+      '<td style="padding:6px 10px;border:1px solid #cde3d6;font-size:11px">'+numsSorted.join('-')+'</td>'+
+      '<td style="padding:6px 10px;border:1px solid #cde3d6;font-size:11px;text-align:center">'+g.nums.length+'</td>'+
+      '<td style="padding:6px 10px;border:1px solid #cde3d6;font-size:11px;text-align:center">'+(g.thick||'')+'</td>'+
+      '</tr>';
+  });
+
+  // Add empty rows to fill the table (min 10 rows total)
+  var emptyNeeded = Math.max(0, 10-data.rows.length);
+  for(var i=0;i<emptyNeeded;i++){
+    tableRows += '<tr><td style="padding:6px 10px;border:1px solid #ccc;height:22px">&nbsp;</td><td style="border:1px solid #ccc"></td><td style="border:1px solid #ccc"></td><td style="border:1px solid #ccc"></td><td style="border:1px solid #ccc"></td></tr>';
+  }
+
+  var html = '<div style="font-family:Arial,sans-serif;color:#000;padding:28px;max-width:800px;margin:0 auto">'+
+
+    // Header
+    '<table style="width:100%;border-collapse:collapse;border:2px solid #1a5c3a;margin-bottom:0">'+
+    '<tr>'+
+    '<td style="width:180px;padding:12px;border-right:2px solid #1a5c3a;vertical-align:middle;background:#f8faf8">'+
+    '<div style="font-size:22px;font-weight:700;font-style:italic;color:#1a5c3a">Dilean</div>'+
+    '<div style="font-size:9px;letter-spacing:3px;color:#1a5c3a">MARBLES</div>'+
+    '</td>'+
+    '<td style="text-align:center;padding:12px;background:#f8faf8">'+
+    '<div style="font-size:20px;font-weight:700;letter-spacing:2px;color:#1a5c3a">MATERIAL TRANSFER SHEET</div>'+
+    '</td></tr></table>'+
+
+    // FROM
+    '<table style="width:100%;border-collapse:collapse;border:2px solid #1a5c3a;border-top:none;margin-bottom:0">'+
+    '<tr><td colspan="2" style="background:#1a5c3a;color:#fff;font-weight:700;padding:5px 10px;font-size:12px">FROM:</td></tr>'+
+    '<tr>'+
+    '<td style="padding:5px 10px;font-size:11px;width:50%;border-right:1px solid #ccc"><strong>Name:</strong> &nbsp;&nbsp;&nbsp;'+fromName+'</td>'+
+    '<td style="padding:5px 10px;font-size:11px"><strong>Address:</strong> &nbsp;'+fromAddr+'</td>'+
+    '</tr>'+
+    '<tr><td colspan="2" style="padding:3px 10px 8px;font-size:11px"><strong>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;City/State/ZIP:</strong> &nbsp;&nbsp;'+fromCity+'</td></tr>'+
+    '</table>'+
+
+    // TO
+    '<table style="width:100%;border-collapse:collapse;border:2px solid #1a5c3a;border-top:none;margin-bottom:0">'+
+    '<tr><td colspan="2" style="background:#1a5c3a;color:#fff;font-weight:700;padding:5px 10px;font-size:12px">TO:</td></tr>'+
+    '<tr>'+
+    '<td style="padding:5px 10px;font-size:11px;width:50%;border-right:1px solid #ccc"><strong>Name:</strong> &nbsp;&nbsp;&nbsp;'+toName+'</td>'+
+    '<td style="padding:5px 10px;font-size:11px"><strong>Address:</strong> &nbsp;'+toAddr+'</td>'+
+    '</tr>'+
+    '<tr><td colspan="2" style="padding:3px 10px 8px;font-size:11px"><strong>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;City/State/ZIP:</strong> &nbsp;&nbsp;'+toCity+'</td></tr>'+
+    '</table>'+
+
+    // Material table
+    '<table style="width:100%;border-collapse:collapse;border:2px solid #1a5c3a;border-top:none;margin-bottom:0">'+
+    '<tr><td colspan="5" style="background:#1a5c3a;color:#fff;font-weight:700;padding:6px 10px;font-size:11px;text-align:center;font-style:italic;letter-spacing:1px">INSERT THE MATERIAL INFORMATION BELOW:</td></tr>'+
+    '<tr style="background:#f0f7f3">'+
+    '<th style="padding:6px 10px;border:1px solid #cde3d6;font-size:11px;text-align:left;width:20%">Block#/Bundle</th>'+
+    '<th style="padding:6px 10px;border:1px solid #cde3d6;font-size:11px;text-align:left;width:18%">Material</th>'+
+    '<th style="padding:6px 10px;border:1px solid #cde3d6;font-size:11px;text-align:left">Slab#</th>'+
+    '<th style="padding:6px 10px;border:1px solid #cde3d6;font-size:11px;text-align:center;width:8%">Qnt</th>'+
+    '<th style="padding:6px 10px;border:1px solid #cde3d6;font-size:11px;text-align:center;width:12%">Thickness</th>'+
+    '</tr>'+
+    tableRows+
+    '</table>'+
+
+    // Totals
+    '<table style="width:100%;border-collapse:collapse;border:2px solid #1a5c3a;border-top:none;margin-bottom:0">'+
+    '<tr>'+
+    '<td style="padding:10px;font-size:11px;width:40%"><strong><em>Total Gross Weight</em></strong> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; _______________</td>'+
+    '<td style="padding:10px;font-size:11px"><strong><em>Total Slabs</em></strong> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <strong>'+data.total+'</strong> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</td>'+
+    '</tr></table>'+
+
+    // Additional info
+    '<table style="width:100%;border-collapse:collapse;border:2px solid #1a5c3a;border-top:none;margin-bottom:0">'+
+    '<tr><td style="background:#1a5c3a;color:#fff;font-weight:700;padding:6px 10px;font-size:11px;text-align:center;font-style:italic;letter-spacing:1px">ADDITIONAL INFORMATION</td></tr>'+
+    '<tr><td style="padding:8px 10px;min-height:60px;font-size:11px;height:30px">'+( notes||'&nbsp;')+'</td></tr>'+
+    '<tr><td style="padding:5px 10px;height:20px">&nbsp;</td></tr>'+
+    '<tr><td style="padding:5px 10px;height:20px">&nbsp;</td></tr>'+
+    '</table>'+
+
+    // Signature
+    '<table style="width:100%;border-collapse:collapse;border:2px solid #1a5c3a;border-top:none">'+
+    '<tr>'+
+    '<td style="padding:10px;font-size:11px;width:50%;border-right:1px solid #ccc">'+
+    '<em><strong>Shipper:</strong></em> &nbsp;&nbsp; <span style="border-bottom:1px solid #000;display:inline-block;width:180px;padding-bottom:2px">'+shipper+'</span>'+
+    '</td>'+
+    '<td style="padding:10px;font-size:11px">'+
+    '<em><strong>Date:</strong></em> &nbsp;&nbsp; '+dateFormatted+
+    '</td></tr>'+
+    '<tr>'+
+    '<td style="padding:10px;font-size:11px;border-right:1px solid #ccc;border-top:1px solid #ccc">'+
+    '<em><strong>Driver:</strong></em> &nbsp;&nbsp;&nbsp; <span style="border-bottom:1px solid #000;display:inline-block;width:180px;padding-bottom:2px">'+driver+'</span>'+
+    '</td>'+
+    '<td style="padding:10px;font-size:11px;border-top:1px solid #ccc">'+
+    '<em><strong>Date:</strong></em> &nbsp;&nbsp; &nbsp;&nbsp;&nbsp;&nbsp;/&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/'+
+    '</td></tr>'+
+    '</table>'+
+
+    '<div style="text-align:right;font-size:10px;color:#999;margin-top:8px">Page &nbsp;&nbsp; from &nbsp;&nbsp;</div>'+
+    '</div>';
+
+  document.getElementById('print-area').innerHTML = html;
+
+  // Ask if should update slab locations
+  var newLoc = toName;
+  if(confirm('Transfer Sheet gerado!\n\nDeseja atualizar o local das ' + data.total + ' chapa(s) para "' + newLoc + '" no estoque?')){
+    updateSlabLocations(newLoc);
+  } else {
+    window.print();
+  }
+}
+
+async function updateSlabLocations(newLoc){
+  sync('spin', 'Atualizando locais...');
+  try{
+    // Add new location if not exists
+    if(getAllLocs().indexOf(newLoc)===-1){
+      locs.push(newLoc);
+      await saveSetting('locations', locs);
+      rebuildSels();
+    }
+    // Update each selected slab
+    for(var i=0;i<trSelIds.length;i++){
+      var sid = trSelIds[i];
+      var s = slabs.find(function(x){return x.id===sid;});
+      if(!s)continue;
+      s.location = newLoc;
+      await sbU('slabs', sid, {location: newLoc});
+    }
+    sync('ok', 'Locais atualizados!');
+    renderTable();
+    renderStats();
+    alert('✅ ' + trSelIds.length + ' chapa(s) transferida(s) para "' + newLoc + '" com sucesso!\n\nAgora vou imprimir o documento.');
+    window.print();
+  } catch(e){
+    sync('err', 'Erro ao atualizar');
+    alert('Erro ao atualizar locais: ' + e.message);
+    window.print();
+  }
+}
+
 function closeM(id){document.getElementById(id).classList.add('hidden');}
 document.querySelectorAll('.mb').forEach(function(m){m.addEventListener('click',function(e){if(e.target===m)m.classList.add('hidden');});});
 function showPage(p){
-  ['inventory','visual','invoices','report','clients','alerts','bills','settings'].forEach(function(pg){document.getElementById('page-'+pg).classList.toggle('hidden',pg!==p);});
-  document.querySelectorAll('.nb').forEach(function(b,i){b.classList.toggle('active',['inventory','visual','invoices','report','clients','alerts','bills','settings'][i]===p);});
+  ['inventory','visual','invoices','report','clients','transfer','alerts','bills','settings'].forEach(function(pg){document.getElementById('page-'+pg).classList.toggle('hidden',pg!==p);});
+  document.querySelectorAll('.nb').forEach(function(b,i){b.classList.toggle('active',['inventory','visual','invoices','report','clients','transfer','alerts','bills','settings'][i]===p);});
   if(p==='visual')renderVis();
   if(p==='invoices')renderInvoices();
   if(p==='report')renderReport();
   if(p==='clients')renderClientsList();
+  if(p==='transfer'){initTransferPage();}
   if(p==='alerts')renderAlerts();
   if(p==='bills')renderBills();
   if(p==='settings')loadSettingsForm();
