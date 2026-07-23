@@ -154,6 +154,7 @@ table tr:hover td{background:var(--b2);}
       <button class="nb" onclick="showPage('invoices')">Faturamento</button>
       <button class="nb" onclick="showPage('report')">Relatório</button>
       <button class="nb" onclick="showPage('clients')">Clientes</button>
+      <button class="nb" onclick="showPage('financeiro')">💵 Financeiro</button>
       <button class="nb" onclick="showPage('transfer')">📋 Transfer</button>
       <button class="nb" onclick="showPage('alerts')">🔔 Alertas</button>
       <button class="nb" onclick="showPage('bills')">💳 Contas</button>
@@ -256,6 +257,58 @@ table tr:hover td{background:var(--b2);}
         <button class="btn p" onclick="openClientModal()">+ Nova Empresa</button>
       </div>
       <div id="clients-list"></div>
+    </div>
+
+    <!-- FINANCEIRO -->
+    <div id="page-financeiro" class="hidden">
+      <div style="margin-bottom:16px">
+        <div style="font-size:15px;font-weight:500;margin-bottom:4px">💵 Planejamento Financeiro</div>
+        <div style="font-size:12px;color:var(--t2)">Fluxo de caixa, projeções e saúde financeira do negócio</div>
+      </div>
+
+      <!-- Saldo atual -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px">
+        <div style="background:var(--b2);border:.5px solid var(--br1);border-radius:var(--rl);padding:16px">
+          <div class="sl" style="margin-bottom:8px">💰 Saldo atual no banco (US$)</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="number" id="fin-balance" placeholder="0.00" step="0.01"
+              style="flex:1;padding:8px 12px;border:.5px solid var(--br2);border-radius:var(--r);font-size:18px;font-weight:600;background:var(--b1);color:var(--t1)">
+            <button class="btn p" onclick="saveFinBalance()">Salvar</button>
+          </div>
+          <div style="font-size:11px;color:var(--t2);margin-top:6px" id="fin-balance-updated"></div>
+        </div>
+        <div style="background:#eaf3de;border:.5px solid #97c459;border-radius:var(--rl);padding:16px;text-align:center">
+          <div style="font-size:11px;color:#3b6d11;font-weight:600;text-transform:uppercase;margin-bottom:6px">Projeção 30 dias</div>
+          <div style="font-size:26px;font-weight:700" id="fin-proj-30">—</div>
+          <div style="font-size:11px;color:var(--t2);margin-top:4px" id="fin-proj-30-detail"></div>
+        </div>
+        <div style="background:#eaf3de;border:.5px solid #97c459;border-radius:var(--rl);padding:16px;text-align:center">
+          <div style="font-size:11px;color:#3b6d11;font-weight:600;text-transform:uppercase;margin-bottom:6px">Projeção 90 dias</div>
+          <div style="font-size:26px;font-weight:700" id="fin-proj-90">—</div>
+          <div style="font-size:11px;color:var(--t2);margin-top:4px" id="fin-proj-90-detail"></div>
+        </div>
+      </div>
+
+      <!-- Gastos fixos -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+        <div>
+          <div class="sec" style="display:flex;justify-content:space-between;align-items:center">
+            <span>Gastos fixos recorrentes</span>
+            <button class="btn sm p" onclick="openFixedExpModal()">+ Adicionar</button>
+          </div>
+          <div id="fin-fixed-list"></div>
+        </div>
+        <div>
+          <div class="sec">Recomendação do sistema</div>
+          <div id="fin-recommendation" style="border:.5px solid var(--br1);border-radius:var(--rl);padding:14px;font-size:13px;line-height:1.7;background:var(--b2)">
+            Insira o saldo atual para receber recomendações.
+          </div>
+        </div>
+      </div>
+
+      <!-- Timeline de fluxo de caixa -->
+      <div class="sec">📅 Fluxo de caixa — próximos 90 dias</div>
+      <div id="fin-cashflow" style="overflow-x:auto"></div>
     </div>
 
     <!-- MATERIAL TRANSFER -->
@@ -614,6 +667,41 @@ table tr:hover td{background:var(--b2);}
   </div>
 </div>
 
+<!-- MODAL GASTO FIXO -->
+<div id="fixedexp-modal" class="mb hidden">
+  <div class="mo" style="width:min(500px,96vw)">
+    <h3 id="fixedexp-title">Novo Gasto Fixo</h3>
+    <div class="fg">
+      <div class="fi" style="grid-column:span 2"><label>Descrição *</label><input id="fe-desc" placeholder="ex: Salário funcionário, Alimentação, Estadia..."></div>
+      <div class="fi"><label>Valor mensal ($) *</label><input id="fe-amount" type="number" min="0" step="0.01"></div>
+      <div class="fi"><label>Dia do mês</label><input id="fe-day" type="number" min="1" max="31" placeholder="ex: 5"></div>
+      <div class="fi"><label>Categoria</label>
+        <select id="fe-cat">
+          <option value="salary">Salário / RH</option>
+          <option value="food">Alimentação</option>
+          <option value="housing">Estadia / Moradia</option>
+          <option value="transport">Transporte</option>
+          <option value="storage">Armazém / Storage</option>
+          <option value="personal">Pessoal</option>
+          <option value="other">Outro</option>
+        </select>
+      </div>
+      <div class="fi"><label>Frequência</label>
+        <select id="fe-freq">
+          <option value="monthly">Mensal</option>
+          <option value="weekly">Semanal</option>
+          <option value="biweekly">Quinzenal</option>
+        </select>
+      </div>
+    </div>
+    <div class="fi" style="margin-top:8px"><label>Observações</label><textarea id="fe-obs" placeholder="Notas..."></textarea></div>
+    <div class="ma">
+      <button class="btn" onclick="closeM('fixedexp-modal')">Cancelar</button>
+      <button class="btn p" onclick="saveFixedExp()">Salvar</button>
+    </div>
+  </div>
+</div>
+
 <script>
 var SB='https://plsgcaiqmltljytchvvt.supabase.co';
 var SK='sb_publishable_QexQ4PIBOved8ajDR42xqQ_UbzeLhYL';
@@ -638,7 +726,7 @@ async function sbU(t,id,d){var r=await fetch(SB+'/rest/v1/'+t+'?id=eq.'+id,{meth
 async function sbD(t,id){var r=await fetch(SB+'/rest/v1/'+t+'?id=eq.'+id,{method:'DELETE',headers:H});if(!r.ok)throw new Error(await r.text());}
 async function sbUpsert(t,d){var r=await fetch(SB+'/rest/v1/'+t,{method:'POST',headers:Object.assign({},H,{'Prefer':'resolution=merge-duplicates'}),body:JSON.stringify(d)});if(!r.ok)throw new Error(await r.text());return r.json();}
 
-var slabs=[],invoices=[],clients=[],bills=[],locs=['Meta Surface','ZTX Surfaces','Pacific Shore','Hope Solutions','Escritório'];
+var slabs=[],invoices=[],clients=[],bills=[],fixedExps=[],finBalance=0,finBalanceDate='',locs=['Meta Surface','ZTX Surfaces','Pacific Shore','Hope Solutions','Escritório'];
 var editId=null,editInvId=null,editClientId=null,selLoc=null,selIds=[],curPhoto=null,eic=0;
 var cfg={name:'DILEAN MARBLES CORP',addr:'1661 E Sample Rd, Pompano Beach FL 33064',phone:'346 455 8150',email:'',bank:'Bank Of America, N.A.',acct:'8981 6729 0208',wire:'063100277',swift:'BOFAUS6S',zelle:'346 455 8150',bankAddr:'555 California St., San Francisco, CA 94104'};
 
@@ -699,6 +787,8 @@ async function init(){
         if(s.key==='config'&&s.value)Object.assign(cfg,s.value);
         if(s.key==='clients'&&s.value)clients=s.value;
         if(s.key==='bills'&&s.value)bills=s.value;
+        if(s.key==='fixedExps'&&s.value)fixedExps=s.value;
+        if(s.key==='finBalance'&&s.value){finBalance=s.value.amount||0;finBalanceDate=s.value.date||'';}
       });
     }
     sync('ok','Sincronizado '+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}));
@@ -1696,6 +1786,11 @@ function printFinancialReport(){
 }
 
 function printSlabReport(){
+  // Check if slabs are loaded
+  if(!slabs||!slabs.length){
+    alert('Nenhuma chapa carregada. Aguarde o sistema carregar e tente novamente.');
+    return;
+  }
   var now = new Date();
   var SLfull = {available:'Disponível', sold:'Vendida', reserved:'Reservada', consigned:'Consignada'};
 
@@ -1732,7 +1827,11 @@ function printSlabReport(){
       else if(s.status==='reserved')totalRes++;
 
       // find invoice
-      var relInv = invoices.find(function(i){return(i.slab_ids||[]).indexOf(s.id)!==-1;});
+      var relInv = invoices.find(function(i){
+        var ids = i.slab_ids;
+        if(typeof ids==='string'){try{ids=JSON.parse(ids);}catch(e){ids=[];}}
+        return (ids||[]).indexOf(s.id)!==-1;
+      });
       var stColor = {available:'#3b6d11',sold:'#a32d2d',reserved:'#854f0b',consigned:'#185fa5'};
       var stBg = {available:'#eaf3de',sold:'#fcebeb',reserved:'#faeeda',consigned:'#e6f1fb'};
       var bg = idx%2===0?'#fff':'#f8faf8';
@@ -1808,15 +1907,17 @@ function printSlabReport(){
     '</div></div>';
 
   document.getElementById('print-area').innerHTML = html;
-
-  // Ask if should update slab locations
-  var newLoc = toName;
-  if(confirm('Transfer Sheet gerado!\n\nDeseja atualizar o local das ' + data.total + ' chapa(s) para "' + newLoc + '" no estoque?')){
-    updateSlabLocations(newLoc);
-  } else {
-    window.print();
-  }
+  document.getElementById('print-area').innerHTML = html;
+  window.print();
 }
+
+
+
+
+
+
+
+
 
 async function updateSlabLocations(newLoc){
   sync('spin', 'Atualizando locais...');
@@ -2612,15 +2713,299 @@ async function updateSlabLocations(newLoc){
   }
 }
 
+// ══════════════════════════════════════════════════════
+// FINANCEIRO — FLUXO DE CAIXA
+// ══════════════════════════════════════════════════════
+var editFeId = null;
+var FE_CAT = {salary:'Salário/RH',food:'Alimentação',housing:'Estadia',transport:'Transporte',storage:'Armazém',personal:'Pessoal',other:'Outro'};
+var FE_COLOR = {salary:'#185fa5',food:'#2a6049',housing:'#854f0b',transport:'#6b3fa0',storage:'#b85a1a',personal:'#a32d2d',other:'#6b6b67'};
+
+async function saveFinBalance(){
+  var val = parseFloat(document.getElementById('fin-balance').value)||0;
+  finBalance = val;
+  finBalanceDate = new Date().toISOString();
+  await saveSetting('finBalance',{amount:val,date:finBalanceDate});
+  document.getElementById('fin-balance-updated').textContent = 'Atualizado em '+new Date().toLocaleDateString('pt-BR')+' às '+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  renderFinanceiro();
+}
+
+function openFixedExpModal(id){
+  editFeId = id||null;
+  var fe = id?fixedExps.find(function(x){return x.id===id;}):null;
+  document.getElementById('fixedexp-title').textContent = fe?'Editar Gasto Fixo':'Novo Gasto Fixo';
+  document.getElementById('fe-desc').value = fe?fe.desc||'':'';
+  document.getElementById('fe-amount').value = fe?fe.amount||'':'';
+  document.getElementById('fe-day').value = fe?fe.day||'':'';
+  document.getElementById('fe-cat').value = fe?fe.cat||'other':'other';
+  document.getElementById('fe-freq').value = fe?fe.freq||'monthly':'monthly';
+  document.getElementById('fe-obs').value = fe?fe.obs||'':'';
+  document.getElementById('fixedexp-modal').classList.remove('hidden');
+}
+
+async function saveFixedExp(){
+  var desc = document.getElementById('fe-desc').value.trim();
+  var amount = parseFloat(document.getElementById('fe-amount').value)||0;
+  if(!desc||!amount){alert('Descrição e valor são obrigatórios.');return;}
+  var fe = {
+    id: editFeId||uid(),
+    desc: desc,
+    amount: amount,
+    day: parseInt(document.getElementById('fe-day').value)||1,
+    cat: document.getElementById('fe-cat').value,
+    freq: document.getElementById('fe-freq').value,
+    obs: document.getElementById('fe-obs').value.trim()
+  };
+  if(editFeId) fixedExps=fixedExps.map(function(x){return x.id===editFeId?fe:x;});
+  else fixedExps.push(fe);
+  await saveSetting('fixedExps',fixedExps);
+  closeM('fixedexp-modal');
+  renderFinanceiro();
+}
+
+async function deleteFixedExp(id){
+  if(!confirm('Excluir este gasto fixo?'))return;
+  fixedExps=fixedExps.filter(function(x){return x.id!==id;});
+  await saveSetting('fixedExps',fixedExps);
+  renderFinanceiro();
+}
+
+// Build cash flow events for next N days
+function buildCashFlow(days){
+  var today = new Date();
+  today.setHours(0,0,0,0);
+  var events = [];
+
+  // 1. Invoices a receber (com due_date)
+  invoices.forEach(function(inv){
+    if(inv.status==='paid')return;
+    var saldo = inv.total - inv.paid;
+    if(saldo<=0)return;
+    var dueDate = inv.due_date ? new Date(inv.due_date) : null;
+    if(dueDate){
+      dueDate.setHours(0,0,0,0);
+      var diff = Math.round((dueDate-today)/(1000*60*60*24));
+      if(diff<=days){
+        events.push({
+          date: dueDate,
+          diff: diff,
+          type: 'receivable',
+          amount: saldo,
+          label: inv.num+' — '+inv.client,
+          color: '#2a6049',
+          icon: '💰'
+        });
+      }
+    }
+  });
+
+  // 2. Contas a pagar (bills com due date)
+  bills.forEach(function(b){
+    if(b.status==='paid')return;
+    var dueDate = new Date(b.due);
+    dueDate.setHours(0,0,0,0);
+    var diff = Math.round((dueDate-today)/(1000*60*60*24));
+    if(diff<=days){
+      events.push({
+        date: dueDate,
+        diff: diff,
+        type: 'payable',
+        amount: -b.amount,
+        label: b.desc,
+        color: '#a32d2d',
+        icon: '📤'
+      });
+    }
+  });
+
+  // 3. Gastos fixos recorrentes
+  fixedExps.forEach(function(fe){
+    var freq = fe.freq||'monthly';
+    var interval = freq==='weekly'?7:freq==='biweekly'?14:30;
+    var monthlyAmt = freq==='weekly'?fe.amount*4.33:freq==='biweekly'?fe.amount*2:fe.amount;
+
+    // Generate occurrences
+    for(var d=0;d<=days;d+=interval){
+      var dt = new Date(today);
+      dt.setDate(dt.getDate()+d);
+      if(fe.day&&freq==='monthly'){
+        dt = new Date(today.getFullYear(), today.getMonth()+(d>0?Math.floor(d/30):0), fe.day);
+        if(dt<today)dt.setMonth(dt.getMonth()+1);
+        if(Math.round((dt-today)/(1000*60*60*24))>days)break;
+      }
+      events.push({
+        date: new Date(dt),
+        diff: Math.round((dt-today)/(1000*60*60*24)),
+        type: 'fixed',
+        amount: -fe.amount,
+        label: fe.desc+' ('+(FE_CAT[fe.cat]||fe.cat)+')',
+        color: '#854f0b',
+        icon: '🔄'
+      });
+      if(freq==='monthly')break; // handled above
+    }
+  });
+
+  // Sort by date
+  events.sort(function(a,b){return a.date-b.date;});
+  return events;
+}
+
+function renderFinanceiro(){
+  // Load saved balance
+  var balInput = document.getElementById('fin-balance');
+  if(balInput && !balInput.value && finBalance) balInput.value = finBalance;
+  if(finBalanceDate){
+    var updEl = document.getElementById('fin-balance-updated');
+    if(updEl) updEl.textContent = 'Atualizado em '+new Date(finBalanceDate).toLocaleDateString('pt-BR');
+  }
+
+  var balance = parseFloat(document.getElementById('fin-balance')?document.getElementById('fin-balance').value:0)||finBalance||0;
+
+  // Fixed expenses
+  var feEl = document.getElementById('fin-fixed-list');
+  if(feEl){
+    if(!fixedExps.length){
+      feEl.innerHTML='<div class="empty" style="padding:16px">Nenhum gasto fixo cadastrado.</div>';
+    } else {
+      var monthlyTotal = fixedExps.reduce(function(a,fe){
+        return a+(fe.freq==='weekly'?fe.amount*4.33:fe.freq==='biweekly'?fe.amount*2:fe.amount);
+      },0);
+      feEl.innerHTML = fixedExps.map(function(fe){
+        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:.5px solid var(--br1)">'+
+          '<div>'+
+          '<span style="padding:2px 7px;border-radius:20px;font-size:10px;font-weight:600;background:var(--b2);color:'+(FE_COLOR[fe.cat]||'var(--t2)')+'">'+( FE_CAT[fe.cat]||fe.cat)+'</span>'+
+          ' <span style="font-size:13px;font-weight:500">'+fe.desc+'</span>'+
+          '<div style="font-size:11px;color:var(--t2);margin-top:2px">'+(fe.freq==='weekly'?'Semanal':fe.freq==='biweekly'?'Quinzenal':'Mensal — dia '+fe.day)+'</div>'+
+          '</div>'+
+          '<div style="display:flex;align-items:center;gap:8px">'+
+          '<span style="font-weight:600;color:var(--d)">'+fmt(fe.amount)+'</span>'+
+          '<button class="btn sm" onclick="openFixedExpModal(this.dataset.id)" data-id="'+fe.id+'">✏</button>'+
+          '<button class="btn sm dn" onclick="deleteFixedExp(this.dataset.id)" data-id="'+fe.id+'">✕</button>'+
+          '</div></div>';
+      }).join('')+
+      '<div style="display:flex;justify-content:space-between;padding:8px 0;font-weight:600;font-size:13px">'+
+      '<span>Total mensal estimado</span><span style="color:var(--d)">'+fmt(monthlyTotal)+'</span></div>';
+    }
+  }
+
+  // Build projections
+  var events30 = buildCashFlow(30);
+  var events90 = buildCashFlow(90);
+
+  var bal30 = balance + events30.reduce(function(a,e){return a+e.amount;},0);
+  var bal90 = balance + events90.reduce(function(a,e){return a+e.amount;},0);
+
+  var rec30 = events30.filter(function(e){return e.type==='receivable';}).reduce(function(a,e){return a+e.amount;},0);
+  var pay30 = events30.filter(function(e){return e.type!=='receivable';}).reduce(function(a,e){return a+e.amount;},0);
+
+  var p30 = document.getElementById('fin-proj-30');
+  var p30d = document.getElementById('fin-proj-30-detail');
+  var p90 = document.getElementById('fin-proj-90');
+  var p90d = document.getElementById('fin-proj-90-detail');
+
+  if(p30){
+    p30.textContent = fmt(bal30);
+    p30.style.color = bal30>=0?'#2a6049':'#a32d2d';
+    if(p30d) p30d.textContent = '+'+fmt(rec30)+' receber / '+fmt(Math.abs(pay30))+' pagar';
+  }
+  if(p90){
+    p90.textContent = fmt(bal90);
+    p90.style.color = bal90>=0?'#2a6049':'#a32d2d';
+    var rec90=events90.filter(function(e){return e.type==='receivable';}).reduce(function(a,e){return a+e.amount;},0);
+    var pay90=events90.filter(function(e){return e.type!=='receivable';}).reduce(function(a,e){return a+e.amount;},0);
+    if(p90d) p90d.textContent = '+'+fmt(rec90)+' receber / '+fmt(Math.abs(pay90))+' pagar';
+  }
+
+  // Recommendation
+  var recEl = document.getElementById('fin-recommendation');
+  if(recEl && balance>0){
+    var monthlyFixed = fixedExps.reduce(function(a,fe){return a+(fe.freq==='weekly'?fe.amount*4.33:fe.freq==='biweekly'?fe.amount*2:fe.amount);},0);
+    var pendingBills = bills.filter(function(b){return b.status!=='paid';}).reduce(function(a,b){return a+b.amount;},0);
+    var pendingReceivable = invoices.filter(function(i){return i.status!=='paid';}).reduce(function(a,i){return a+(i.total-i.paid);},0);
+    var safeBalance = balance - pendingBills - monthlyFixed*2; // 2 meses de cushion
+
+    var html = '<div style="line-height:2">';
+    html += '<div>💳 <strong>Saldo atual:</strong> '+fmt(balance)+'</div>';
+    html += '<div>📤 <strong>Contas a pagar:</strong> <span style="color:var(--d)">'+fmt(pendingBills)+'</span></div>';
+    html += '<div>💰 <strong>A receber:</strong> <span style="color:var(--a)">'+fmt(pendingReceivable)+'</span></div>';
+    html += '<div>🔄 <strong>Gasto fixo/mês:</strong> <span style="color:var(--w)">'+fmt(monthlyFixed)+'</span></div>';
+    html += '<div style="border-top:.5px solid var(--br1);margin:8px 0"></div>';
+
+    if(bal30<0){
+      html += '<div style="color:#a32d2d;font-weight:600">🚨 ATENÇÃO: Projeção negativa em 30 dias!</div>';
+      html += '<div style="color:#a32d2d">Precisa receber <strong>'+fmt(Math.abs(bal30))+'</strong> nos próximos 30 dias para cobrir as despesas.</div>';
+    } else if(bal30<monthlyFixed){
+      html += '<div style="color:#854f0b;font-weight:600">⚠️ Margem apertada nos próximos 30 dias.</div>';
+      html += '<div style="color:#854f0b">Evite gastos extras. Foque em receber as invoices em aberto.</div>';
+    } else if(safeBalance>0){
+      html += '<div style="color:#2a6049;font-weight:600">✅ Situação confortável!</div>';
+      html += '<div>Após cobrir todas as contas e 2 meses de gastos fixos, você tem <strong>'+fmt(safeBalance)+'</strong> disponível para investir ou comprar material.</div>';
+    } else {
+      html += '<div style="color:#2a6049">Situação estável. Mantenha o monitoramento dos recebimentos.</div>';
+    }
+    html += '</div>';
+    recEl.innerHTML = html;
+  }
+
+  // Cash flow timeline
+  var cfEl = document.getElementById('fin-cashflow');
+  if(!cfEl)return;
+
+  var events = buildCashFlow(90);
+  if(!events.length && !balance){
+    cfEl.innerHTML='<div class="empty">Insira o saldo atual e cadastre gastos fixos para ver o fluxo de caixa.</div>';
+    return;
+  }
+
+  var runBal = balance;
+  var today2 = new Date(); today2.setHours(0,0,0,0);
+
+  var rows = '';
+  // Add opening balance row
+  rows += '<tr style="background:#f0f7f3">'+
+    '<td style="padding:8px 12px;font-weight:600;color:#2a6049">Hoje</td>'+
+    '<td style="padding:8px 12px;color:var(--t2)">'+today2.toLocaleDateString('pt-BR')+'</td>'+
+    '<td style="padding:8px 12px">💳 Saldo atual</td>'+
+    '<td style="padding:8px 12px;text-align:right"></td>'+
+    '<td style="padding:8px 12px;text-align:right;font-weight:700;color:#2a6049">'+fmt(balance)+'</td>'+
+    '</tr>';
+
+  events.forEach(function(e){
+    runBal += e.amount;
+    var isNeg = runBal<0;
+    var dayLabel = e.diff===0?'Hoje':e.diff===1?'Amanhã':'Em '+e.diff+' dias';
+    rows += '<tr style="background:'+(isNeg?'#fff5f5':'var(--b1)')+'">'+
+      '<td style="padding:7px 12px;font-size:12px;color:var(--t2)">'+dayLabel+'</td>'+
+      '<td style="padding:7px 12px;font-size:12px;color:var(--t2)">'+e.date.toLocaleDateString('pt-BR')+'</td>'+
+      '<td style="padding:7px 12px;font-size:12px">'+e.icon+' '+e.label+'</td>'+
+      '<td style="padding:7px 12px;text-align:right;font-weight:500;color:'+(e.amount>=0?'#2a6049':'#a32d2d')+'">'+
+        (e.amount>=0?'+':'')+fmt(e.amount)+'</td>'+
+      '<td style="padding:7px 12px;text-align:right;font-weight:700;color:'+(isNeg?'#a32d2d':runBal<balance*0.2?'#854f0b':'#2a6049')+'">'+
+        fmt(runBal)+(isNeg?' ⚠️':'')+'</td>'+
+      '</tr>';
+  });
+
+  cfEl.innerHTML = '<div style="border:.5px solid var(--br1);border-radius:var(--rl);overflow:hidden">'+
+    '<table style="width:100%;border-collapse:collapse;font-size:13px;min-width:600px">'+
+    '<thead><tr style="background:#1a5c3a;color:#fff">'+
+    '<th style="padding:8px 12px;text-align:left">Quando</th>'+
+    '<th style="padding:8px 12px;text-align:left">Data</th>'+
+    '<th style="padding:8px 12px;text-align:left">Descrição</th>'+
+    '<th style="padding:8px 12px;text-align:right">Valor</th>'+
+    '<th style="padding:8px 12px;text-align:right">Saldo projetado</th>'+
+    '</tr></thead><tbody>'+rows+'</tbody></table></div>';
+}
+
 function closeM(id){document.getElementById(id).classList.add('hidden');}
 document.querySelectorAll('.mb').forEach(function(m){m.addEventListener('click',function(e){if(e.target===m)m.classList.add('hidden');});});
 function showPage(p){
-  ['inventory','visual','invoices','report','clients','transfer','alerts','bills','settings'].forEach(function(pg){document.getElementById('page-'+pg).classList.toggle('hidden',pg!==p);});
-  document.querySelectorAll('.nb').forEach(function(b,i){b.classList.toggle('active',['inventory','visual','invoices','report','clients','transfer','alerts','bills','settings'][i]===p);});
+  ['inventory','visual','invoices','report','clients','financeiro','transfer','alerts','bills','settings'].forEach(function(pg){document.getElementById('page-'+pg).classList.toggle('hidden',pg!==p);});
+  document.querySelectorAll('.nb').forEach(function(b,i){b.classList.toggle('active',['inventory','visual','invoices','report','clients','financeiro','transfer','alerts','bills','settings'][i]===p);});
   if(p==='visual')renderVis();
   if(p==='invoices')renderInvoices();
   if(p==='report')renderReport();
   if(p==='clients')renderClientsList();
+  if(p==='financeiro'){renderFinanceiro();}
   if(p==='transfer'){initTransferPage();}
   if(p==='alerts')renderAlerts();
   if(p==='bills')renderBills();
