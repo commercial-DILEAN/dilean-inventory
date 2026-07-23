@@ -261,9 +261,12 @@ table tr:hover td{background:var(--b2);}
 
     <!-- FINANCEIRO -->
     <div id="page-financeiro" class="hidden">
-      <div style="margin-bottom:16px">
-        <div style="font-size:15px;font-weight:500;margin-bottom:4px">💵 Planejamento Financeiro</div>
-        <div style="font-size:12px;color:var(--t2)">Fluxo de caixa, projeções e saúde financeira do negócio</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+        <div>
+          <div style="font-size:15px;font-weight:500;margin-bottom:4px">💵 Planejamento Financeiro</div>
+          <div style="font-size:12px;color:var(--t2)">Fluxo de caixa, projeções e saúde financeira do negócio</div>
+        </div>
+        <button class="btn p" onclick="printFinancialPlan()">🖨 Exportar relatório financeiro</button>
       </div>
 
       <!-- Saldo atual -->
@@ -2994,6 +2997,147 @@ function renderFinanceiro(){
     '<th style="padding:8px 12px;text-align:right">Valor</th>'+
     '<th style="padding:8px 12px;text-align:right">Saldo projetado</th>'+
     '</tr></thead><tbody>'+rows+'</tbody></table></div>';
+}
+
+function printFinancialPlan(){
+  var balance = parseFloat(document.getElementById('fin-balance')?document.getElementById('fin-balance').value:0)||finBalance||0;
+  var now = new Date();
+  var events = buildCashFlow(90);
+
+  // Totals
+  var rec30 = 0, pay30 = 0, rec90 = 0, pay90 = 0;
+  events.forEach(function(e){
+    if(e.diff<=30){
+      if(e.amount>0)rec30+=e.amount; else pay30+=Math.abs(e.amount);
+    }
+    if(e.amount>0)rec90+=e.amount; else pay90+=Math.abs(e.amount);
+  });
+  var bal30 = balance + rec30 - pay30;
+  var bal90 = balance + rec90 - pay90;
+
+  var monthlyFixed = fixedExps.reduce(function(a,fe){
+    return a+(fe.freq==='weekly'?fe.amount*4.33:fe.freq==='biweekly'?fe.amount*2:fe.amount);
+  },0);
+  var pendingBills = bills.filter(function(b){return b.status!=='paid';}).reduce(function(a,b){return a+b.amount;},0);
+  var pendingReceivable = invoices.filter(function(i){return i.status!=='paid';}).reduce(function(a,i){return a+(i.total-i.paid);},0);
+  var safeBalance = balance - pendingBills - monthlyFixed*2;
+
+  // Status
+  var statusColor = bal30<0?'#a32d2d':bal30<monthlyFixed?'#854f0b':'#2a6049';
+  var statusText = bal30<0?'⚠️ ATENÇÃO: Projeção negativa em 30 dias':
+    bal30<monthlyFixed?'⚠️ Margem apertada — monitorar de perto':
+    '✅ Situação financeira saudável';
+
+  // Build cashflow table rows
+  var runBal = balance;
+  var cfRows = '';
+  cfRows += '<tr style="background:#f0f7f3">'+
+    '<td style="padding:6px 10px;font-weight:600;color:#2a6049">Hoje</td>'+
+    '<td style="padding:6px 10px;color:#666">'+now.toLocaleDateString('pt-BR')+'</td>'+
+    '<td style="padding:6px 10px">💳 Saldo inicial</td>'+
+    '<td style="padding:6px 10px;text-align:right">—</td>'+
+    '<td style="padding:6px 10px;text-align:right;font-weight:700;color:#2a6049">'+fmt(balance)+'</td>'+
+    '</tr>';
+
+  events.forEach(function(e){
+    runBal += e.amount;
+    var isNeg = runBal<0;
+    var dayLabel = e.diff===0?'Hoje':e.diff===1?'Amanhã':'Em '+e.diff+' dias';
+    cfRows += '<tr style="background:'+(isNeg?'#fff5f5':e.diff%2===0?'#fff':'#f9f9f9')+'">'+
+      '<td style="padding:5px 10px;font-size:11px;color:#666">'+dayLabel+'</td>'+
+      '<td style="padding:5px 10px;font-size:11px;color:#666">'+e.date.toLocaleDateString('pt-BR')+'</td>'+
+      '<td style="padding:5px 10px;font-size:11px">'+e.icon+' '+e.label+'</td>'+
+      '<td style="padding:5px 10px;text-align:right;font-size:11px;font-weight:500;color:'+(e.amount>=0?'#2a6049':'#a32d2d')+'">'+
+        (e.amount>=0?'+':'')+fmt(e.amount)+'</td>'+
+      '<td style="padding:5px 10px;text-align:right;font-size:11px;font-weight:700;color:'+(isNeg?'#a32d2d':runBal<balance*0.2?'#854f0b':'#2a6049')+'">'+
+        fmt(runBal)+(isNeg?' ⚠️':'')+'</td>'+
+      '</tr>';
+  });
+
+  // Fixed expenses rows
+  var feRows = fixedExps.map(function(fe){
+    return '<tr>'+
+      '<td style="padding:5px 10px;font-size:11px">'+fe.desc+'</td>'+
+      '<td style="padding:5px 10px;font-size:11px;color:#666">'+(FE_CAT[fe.cat]||fe.cat)+'</td>'+
+      '<td style="padding:5px 10px;font-size:11px;color:#666">'+(fe.freq==='weekly'?'Semanal':fe.freq==='biweekly'?'Quinzenal':'Mensal — dia '+fe.day)+'</td>'+
+      '<td style="padding:5px 10px;text-align:right;font-size:11px;color:#a32d2d;font-weight:500">'+fmt(fe.amount)+'</td>'+
+      '</tr>';
+  }).join('');
+
+  var html = '<div style="font-family:Arial,sans-serif;color:#000;padding:28px;max-width:900px">'+
+
+    // Header
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:14px;border-bottom:3px solid #1a5c3a;margin-bottom:20px">'+
+    '<div>'+
+    '<div style="font-size:22px;font-weight:700;color:#1a5c3a">DILEAN MARBLES CORP</div>'+
+    '<div style="font-size:11px;color:#666;margin-top:4px">1661 E Sample Rd, Pompano Beach FL 33064</div>'+
+    '<div style="font-size:11px;color:#666">Tel/Zelle: 346 455 8150</div>'+
+    '</div>'+
+    '<div style="text-align:right">'+
+    '<div style="font-size:20px;font-weight:700;color:#1a5c3a">RELATÓRIO FINANCEIRO</div>'+
+    '<div style="font-size:11px;color:#666;margin-top:4px">Gerado em: '+now.toLocaleDateString('pt-BR')+' às '+now.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})+'</div>'+
+    '<div style="font-size:11px;color:#666">Período: próximos 90 dias</div>'+
+    '</div></div>'+
+
+    // Status banner
+    '<div style="background:'+(bal30<0?'#fff5f5':bal30<monthlyFixed?'#fffbf0':'#f0f7f3')+';border:2px solid '+statusColor+';border-radius:8px;padding:12px 16px;margin-bottom:20px;text-align:center">'+
+    '<div style="font-size:14px;font-weight:700;color:'+statusColor+'">'+statusText+'</div>'+
+    '</div>'+
+
+    // Summary cards
+    '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px">'+
+    '<div style="background:#f0f7f3;border:1px solid #cde3d6;border-radius:8px;padding:12px;text-align:center">'+
+    '<div style="font-size:10px;font-weight:700;color:#2a6049;text-transform:uppercase;margin-bottom:6px">Saldo Atual</div>'+
+    '<div style="font-size:20px;font-weight:700;color:#1a5c3a">'+fmt(balance)+'</div>'+
+    '</div>'+
+    '<div style="background:'+(bal30<0?'#fff5f5':'#f0f7f3')+';border:1px solid '+(bal30<0?'#f09595':'#cde3d6')+';border-radius:8px;padding:12px;text-align:center">'+
+    '<div style="font-size:10px;font-weight:700;color:'+(bal30<0?'#a32d2d':'#2a6049')+';text-transform:uppercase;margin-bottom:6px">Projeção 30 dias</div>'+
+    '<div style="font-size:20px;font-weight:700;color:'+(bal30<0?'#a32d2d':'#1a5c3a')+'">'+fmt(bal30)+'</div>'+
+    '</div>'+
+    '<div style="background:'+(bal90<0?'#fff5f5':'#f0f7f3')+';border:1px solid '+(bal90<0?'#f09595':'#cde3d6')+';border-radius:8px;padding:12px;text-align:center">'+
+    '<div style="font-size:10px;font-weight:700;color:'+(bal90<0?'#a32d2d':'#2a6049')+';text-transform:uppercase;margin-bottom:6px">Projeção 90 dias</div>'+
+    '<div style="font-size:20px;font-weight:700;color:'+(bal90<0?'#a32d2d':'#1a5c3a')+'">'+fmt(bal90)+'</div>'+
+    '</div>'+
+    '<div style="background:#faeeda;border:1px solid #fac775;border-radius:8px;padding:12px;text-align:center">'+
+    '<div style="font-size:10px;font-weight:700;color:#854f0b;text-transform:uppercase;margin-bottom:6px">A Receber</div>'+
+    '<div style="font-size:20px;font-weight:700;color:#854f0b">'+fmt(pendingReceivable)+'</div>'+
+    '</div>'+
+    '</div>'+
+
+    // Fixed expenses
+    (fixedExps.length?
+    '<div style="margin-bottom:20px">'+
+    '<div style="font-size:13px;font-weight:700;color:#1a5c3a;padding:8px 0;border-bottom:2px solid #1a5c3a;margin-bottom:8px">GASTOS FIXOS RECORRENTES</div>'+
+    '<table style="width:100%;border-collapse:collapse;font-size:12px">'+
+    '<thead><tr style="background:#1a5c3a;color:#fff">'+
+    '<th style="padding:6px 10px;text-align:left">Descrição</th>'+
+    '<th style="padding:6px 10px;text-align:left">Categoria</th>'+
+    '<th style="padding:6px 10px;text-align:left">Frequência</th>'+
+    '<th style="padding:6px 10px;text-align:right">Valor</th>'+
+    '</tr></thead><tbody>'+feRows+
+    '<tr style="background:#f0f7f3;font-weight:700">'+
+    '<td colspan="3" style="padding:6px 10px;border-top:2px solid #1a5c3a">Total mensal estimado</td>'+
+    '<td style="padding:6px 10px;text-align:right;border-top:2px solid #1a5c3a;color:#a32d2d">'+fmt(monthlyFixed)+'</td>'+
+    '</tr></tbody></table></div>':'') +
+
+    // Cash flow
+    '<div style="font-size:13px;font-weight:700;color:#1a5c3a;padding:8px 0;border-bottom:2px solid #1a5c3a;margin-bottom:8px">FLUXO DE CAIXA — PRÓXIMOS 90 DIAS</div>'+
+    '<table style="width:100%;border-collapse:collapse;font-size:11px">'+
+    '<thead><tr style="background:#1a5c3a;color:#fff">'+
+    '<th style="padding:6px 10px;text-align:left">Prazo</th>'+
+    '<th style="padding:6px 10px;text-align:left">Data</th>'+
+    '<th style="padding:6px 10px;text-align:left">Descrição</th>'+
+    '<th style="padding:6px 10px;text-align:right">Movimento</th>'+
+    '<th style="padding:6px 10px;text-align:right">Saldo projetado</th>'+
+    '</tr></thead><tbody>'+cfRows+'</tbody></table>'+
+
+    // Footer
+    '<div style="text-align:center;font-size:10px;color:#999;margin-top:16px;border-top:1px solid #e0e0e0;padding-top:10px">'+
+    'DILEAN MARBLES CORP — Relatório Financeiro — Gerado em '+now.toLocaleDateString('pt-BR')+
+    '</div></div>';
+
+  document.getElementById('print-area').innerHTML = html;
+  window.print();
 }
 
 function closeM(id){document.getElementById(id).classList.add('hidden');}
