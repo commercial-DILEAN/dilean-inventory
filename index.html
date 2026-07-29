@@ -1249,19 +1249,84 @@ function renderInvoices(){
       '<button class="btn sm p" onclick="prevInv(\''+inv.id+'\')">🖨 Invoice</button>'+
       '<button class="btn sm wn" onclick="editInv(\''+inv.id+'\')">✏ Editar</button>'+
         '<button class="btn sm" style="margin-top:4px;border-color:#a32d2d;color:#a32d2d" onclick="regP(this.dataset.id)" data-id="'+inv.id+'">Registrar pagamento</button>'+
+        '<button class="btn sm" onclick="openClientLedger(this.dataset.id)" data-id="'+inv.id+'">📋 Extrato</button>'+
       '<button class="btn sm dn" onclick="delInv(\''+inv.id+'\')">Excluir</button></div></div>';
   }).join('');
 }
 
-async function regP(id){
+function regP(id){
   var inv=invoices.find(function(i){return i.id===id;});if(!inv)return;
-  var val=parseFloat(prompt('Invoice: '+inv.num+'\nTotal: '+fmt(inv.total)+'\nPago atual: '+fmt(inv.paid)+'\n\nNovo total pago ($):',inv.paid));
-  if(isNaN(val))return;
-  inv.paid=val;inv.status=val>=inv.total?'paid':val>0?'partial':'pending';
+  openPaymentModal(id);
+}
+
+function openPaymentModal(invId){
+  var inv=invoices.find(function(i){return i.id===invId;});if(!inv)return;
+  var saldo=+(inv.total-inv.paid).toFixed(2);
+  var history=inv.payment_history||[];
+  var existing=document.getElementById('pay-modal');
+  if(existing)existing.remove();
+
+  var histHTML='';
+  if(history.length){
+    histHTML='<div class="sec">Pagamentos anteriores</div>'+
+      '<div style="border:.5px solid var(--br1);border-radius:var(--r);overflow:hidden;margin-bottom:12px">'+
+      history.map(function(p,i){
+        return'<div style="display:flex;justify-content:space-between;padding:7px 12px;border-bottom:.5px solid var(--br1);font-size:12px;background:'+(i%2?'var(--b2)':'var(--b1)')+'">'+
+          '<div><strong>'+fmt(p.amount)+'</strong>'+(p.note?' — '+p.note:'')+'</div>'+
+          '<div style="color:var(--t2)">'+( p.date||'—')+'</div>'+
+          '</div>';
+      }).join('')+'</div>';
+  }
+
+  var div=document.createElement('div');
+  div.id='pay-modal';
+  div.className='mb';
+  div.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:300';
+  div.innerHTML='<div class="mo" style="width:min(520px,96vw)">'+
+    '<h3>Registrar Pagamento</h3>'+
+    '<div style="background:var(--b2);border-radius:var(--r);padding:12px;margin-bottom:14px;font-size:13px;line-height:1.9">'+
+    '<div><strong>Invoice:</strong> '+inv.num+' — '+inv.client+'</div>'+
+    '<div><strong>Total faturado:</strong> '+fmt(inv.total)+'</div>'+
+    '<div><strong>Total pago:</strong> <span class="g">'+fmt(inv.paid)+'</span></div>'+
+    '<div><strong>Saldo em aberto:</strong> <span class="r">'+fmt(saldo)+'</span></div>'+
+    '</div>'+
+    histHTML+
+    '<div class="sec">Novo pagamento</div>'+
+    '<div class="fg">'+
+    '<div class="fi"><label>Valor recebido ($) *</label><input id="pm-amount" type="number" min="0" step="0.01" value="'+saldo.toFixed(2)+'"></div>'+
+    '<div class="fi"><label>Data do recebimento *</label><input id="pm-date" type="date" value="'+new Date().toISOString().slice(0,10)+'"></div>'+
+    '<div class="fi" style="grid-column:span 2"><label>Observação (opcional)</label><input id="pm-note" placeholder="ex: Wire transfer, Zelle, Cheque #123..."></div>'+
+    '</div>'+
+    '<div class="ma">'+
+    '<button class="btn" onclick="document.getElementById(&quot;pay-modal&quot;).remove()">Cancelar</button>'+
+    '<button class="btn p" id="pm-save-btn" onclick="savePayment(&quot;'+invId+'&quot;)">Salvar Pagamento</button>'+
+    '</div></div>';
+  document.body.appendChild(div);
+  div.addEventListener('click',function(e){if(e.target===div)div.remove();});
+  setTimeout(function(){var el=document.getElementById('pm-amount');if(el){el.focus();el.select();}},100);
+}
+
+async function savePayment(invId){
+  var inv=invoices.find(function(i){return i.id===invId;});if(!inv)return;
+  var amount=parseFloat(document.getElementById('pm-amount').value)||0;
+  var date=document.getElementById('pm-date').value;
+  var note=document.getElementById('pm-note').value.trim();
+  if(!amount||amount<=0){alert('Informe um valor válido.');return;}
+  if(!date){alert('Informe a data.');return;}
+  var history=Array.isArray(inv.payment_history)?inv.payment_history:[];
+  history.push({amount:amount,date:date,note:note,registered:new Date().toISOString()});
+  var newPaid=+(inv.paid+amount).toFixed(2);
+  if(newPaid>inv.total)newPaid=inv.total;
+  inv.paid=newPaid;
+  inv.payment_history=history;
+  inv.status=newPaid>=inv.total?'paid':newPaid>0?'partial':'pending';
   try{
-    sync('spin','Salvando...');await sbU('invoices',id,{paid:inv.paid,status:inv.status});
-    // chapas já foram baixadas no momento do faturamento
-    sync('ok','Salvo');renderInvoices();renderStats();renderTable();
+    sync('spin','Salvando...');
+    await sbU('invoices',invId,{paid:inv.paid,status:inv.status,payment_history:history});
+    sync('ok','Salvo');
+    var modal=document.getElementById('pay-modal');if(modal)modal.remove();
+    renderInvoices();renderStats();renderTable();
+    if(!document.getElementById('page-report').classList.contains('hidden'))renderReport();
   }catch(e){sync('err','Erro');alert(e.message);}
 }
 
@@ -2322,6 +2387,7 @@ function renderAlerts(){
         '<div style="text-align:right">'+
         '<div style="font-weight:600;color:#a32d2d">'+fmt(saldo)+'</div>'+
         '<button class="btn sm" style="margin-top:4px;border-color:#a32d2d;color:#a32d2d" onclick="regP(this.dataset.id)" data-id="'+inv.id+'">Registrar pagamento</button>'+
+        '<button class="btn sm" onclick="openClientLedger(this.dataset.id)" data-id="'+inv.id+'">📋 Extrato</button>'+
         '</div></div>';
     });
     html += '</div>';
@@ -3140,6 +3206,131 @@ function printFinancialPlan(){
   window.print();
 }
 
+function openClientLedger(invIdOrClientName){
+  // Can receive an invoice ID or client name
+  // If invoice ID, get the client name
+  var clientName = invIdOrClientName;
+  var testInv = invoices.find(function(i){return i.id===invIdOrClientName;});
+  if(testInv) clientName = testInv.client;
+
+  // Get all invoices for this client
+  var clientInvs = invoices.filter(function(i){return i.client===clientName;});
+  if(!clientInvs.length){alert('Nenhuma invoice encontrada para '+clientName);return;}
+
+  var now = new Date();
+
+  // Build chronological ledger
+  var entries = [];
+
+  clientInvs.forEach(function(inv){
+    // Debit entry (invoice)
+    entries.push({
+      date: inv.date||'—',
+      dateSort: inv.date||'0000',
+      type: 'invoice',
+      desc: 'Invoice '+inv.num,
+      debit: inv.total,
+      credit: 0,
+      invNum: inv.num
+    });
+
+    // Credit entries (payments with history)
+    var history = Array.isArray(inv.payment_history)?inv.payment_history:[];
+    if(history.length){
+      history.forEach(function(p){
+        entries.push({
+          date: p.date||inv.date||'—',
+          dateSort: p.date||inv.date||'0000',
+          type: 'payment',
+          desc: 'Pagamento ref. '+inv.num+(p.note?' — '+p.note:''),
+          debit: 0,
+          credit: p.amount,
+          invNum: inv.num
+        });
+      });
+    } else if(inv.paid>0){
+      // No history but has paid amount — show as single payment
+      entries.push({
+        date: inv.date||'—',
+        dateSort: inv.date||'0000',
+        type: 'payment',
+        desc: 'Pagamento ref. '+inv.num,
+        debit: 0,
+        credit: inv.paid,
+        invNum: inv.num
+      });
+    }
+  });
+
+  // Sort by date
+  entries.sort(function(a,b){return a.dateSort.localeCompare(b.dateSort);});
+
+  // Running balance
+  var runBal = 0;
+  var totalDebit = 0, totalCredit = 0;
+  var rows = entries.map(function(e,i){
+    runBal += e.debit - e.credit;
+    totalDebit += e.debit;
+    totalCredit += e.credit;
+    var bg = i%2===0?'#fff':'#f9f9f9';
+    return '<tr style="background:'+bg+'">'+
+      '<td style="padding:6px 10px;font-size:11px;color:#666;white-space:nowrap">'+e.date+'</td>'+
+      '<td style="padding:6px 10px;font-size:11px">'+
+        '<span style="padding:2px 7px;border-radius:10px;font-size:10px;font-weight:600;background:'+(e.type==='invoice'?'#e6f1fb':'#eaf3de')+';color:'+(e.type==='invoice'?'#185fa5':'#3b6d11')+'">'+
+        (e.type==='invoice'?'Cobrança':'Pagamento')+'</span> '+e.desc+'</td>'+
+      '<td style="padding:6px 10px;text-align:right;font-size:11px;color:#a32d2d;font-weight:500">'+(e.debit>0?fmt(e.debit):'')+'</td>'+
+      '<td style="padding:6px 10px;text-align:right;font-size:11px;color:#2a6049;font-weight:500">'+(e.credit>0?fmt(e.credit):'')+'</td>'+
+      '<td style="padding:6px 10px;text-align:right;font-size:12px;font-weight:700;color:'+(runBal>0?'#a32d2d':runBal<0?'#2a6049':'#666')+'">'+fmt(runBal)+'</td>'+
+      '</tr>';
+  }).join('');
+
+  // Print HTML
+  var html = '<div style="font-family:Arial,sans-serif;color:#000;padding:28px;max-width:800px">'+
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:12px;border-bottom:3px solid #1a5c3a;margin-bottom:16px">'+
+    '<div>'+
+    '<div style="font-size:18px;font-weight:700;color:#1a5c3a">DILEAN MARBLES CORP</div>'+
+    '<div style="font-size:11px;color:#666;margin-top:3px">1661 E Sample Rd, Pompano Beach FL 33064</div>'+
+    '</div>'+
+    '<div style="text-align:right">'+
+    '<div style="font-size:16px;font-weight:700;color:#1a5c3a">EXTRATO DE CONTA</div>'+
+    '<div style="font-size:11px;color:#666;margin-top:3px">Gerado em: '+now.toLocaleDateString('pt-BR')+'</div>'+
+    '</div></div>'+
+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">'+
+    '<div style="background:#f8faf8;border:1px solid #cde3d6;border-radius:6px;padding:10px 14px">'+
+    '<div style="font-size:10px;font-weight:700;color:#1a5c3a;text-transform:uppercase;margin-bottom:4px">Cliente</div>'+
+    '<div style="font-size:15px;font-weight:700">'+clientName+'</div>'+
+    '<div style="font-size:11px;color:#666;margin-top:3px">'+clientInvs.length+' invoice(s) no histórico</div>'+
+    '</div>'+
+    '<div style="background:#fff3f3;border:1px solid #f5c0c0;border-radius:6px;padding:10px 14px;text-align:right">'+
+    '<div style="font-size:10px;font-weight:700;color:#a32d2d;text-transform:uppercase;margin-bottom:4px">Saldo atual</div>'+
+    '<div style="font-size:22px;font-weight:700;color:'+(totalDebit-totalCredit>0?'#a32d2d':'#2a6049')+'">'+fmt(totalDebit-totalCredit)+'</div>'+
+    '<div style="font-size:11px;color:#666;margin-top:3px">'+(totalDebit-totalCredit>0?'a receber':'sem saldo em aberto')+'</div>'+
+    '</div></div>'+
+
+    '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px">'+
+    '<thead><tr style="background:#1a5c3a;color:#fff">'+
+    '<th style="padding:7px 10px;text-align:left;width:90px">Data</th>'+
+    '<th style="padding:7px 10px;text-align:left">Descrição</th>'+
+    '<th style="padding:7px 10px;text-align:right;width:100px">Débito</th>'+
+    '<th style="padding:7px 10px;text-align:right;width:100px">Crédito</th>'+
+    '<th style="padding:7px 10px;text-align:right;width:100px">Saldo</th>'+
+    '</tr></thead><tbody>'+rows+
+    '<tr style="background:#1a5c3a;color:#fff;font-weight:700">'+
+    '<td colspan="2" style="padding:7px 10px">TOTAIS</td>'+
+    '<td style="padding:7px 10px;text-align:right">'+fmt(totalDebit)+'</td>'+
+    '<td style="padding:7px 10px;text-align:right">'+fmt(totalCredit)+'</td>'+
+    '<td style="padding:7px 10px;text-align:right">'+fmt(totalDebit-totalCredit)+'</td>'+
+    '</tr></tbody></table>'+
+
+    '<div style="text-align:center;font-size:10px;color:#999;border-top:1px solid #e0e0e0;padding-top:8px">'+
+    'DILEAN MARBLES CORP — Extrato de Conta — '+clientName+' — '+now.toLocaleDateString('pt-BR')+
+    '</div></div>';
+
+  document.getElementById('print-area').innerHTML = html;
+  window.print();
+}
+
 function closeM(id){document.getElementById(id).classList.add('hidden');}
 document.querySelectorAll('.mb').forEach(function(m){m.addEventListener('click',function(e){if(e.target===m)m.classList.add('hidden');});});
 function showPage(p){
@@ -3160,3 +3351,5 @@ init();
 </script>
 </body>
 </html>
+
+      '<button class="btn sm" onclick="openClientLedger(this.dataset.id)" data-id="'+inv.id+'">📋 Extrato</button>'+
