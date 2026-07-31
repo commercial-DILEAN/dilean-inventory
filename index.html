@@ -154,6 +154,7 @@ table tr:hover td{background:var(--b2);}
       <button class="nb" onclick="showPage('invoices')">Faturamento</button>
       <button class="nb" onclick="showPage('report')">Relatório</button>
       <button class="nb" onclick="showPage('clients')">Clientes</button>
+      <button class="nb" onclick="showPage('containers')">📦 Containers</button>
       <button class="nb" onclick="showPage('financeiro')">💵 Financeiro</button>
       <button class="nb" onclick="showPage('transfer')">📋 Transfer</button>
       <button class="nb" onclick="showPage('alerts')">🔔 Alertas</button>
@@ -188,7 +189,16 @@ table tr:hover td{background:var(--b2);}
           <option value="reserved">Reservada</option><option value="consigned">Consignada</option>
         </select>
         <button class="btn p" onclick="openSM()">+ Nova Chapa</button>
-        <button class="btn" onclick="printSlabReport()">🖨 Relatório de estoque</button>
+        <div style="display:flex;gap:6px;align-items:center">
+          <select id="report-status-filter" style="padding:5px 8px;border:.5px solid var(--br1);border-radius:var(--r);font-size:12px;background:var(--b1);color:var(--t1)">
+            <option value="">Todos os status</option>
+            <option value="available">Disponíveis</option>
+            <option value="sold">Vendidas</option>
+            <option value="consigned">Consignadas</option>
+            <option value="reserved">Reservadas</option>
+          </select>
+          <button class="btn" onclick="printSlabReport()">🖨 Relatório de estoque</button>
+        </div>
       </div>
       <div id="msum" class="hidden"><div class="sec" id="msumt"></div><div class="mc" id="mc"></div></div>
       <div class="tw">
@@ -259,6 +269,18 @@ table tr:hover td{background:var(--b2);}
       <div id="clients-list"></div>
     </div>
 
+    <!-- CONTAINERS -->
+    <div id="page-containers" class="hidden">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+        <div>
+          <div style="font-size:15px;font-weight:500;margin-bottom:4px">📦 Gestão de Containers</div>
+          <div style="font-size:12px;color:var(--t2)">Controle de custos por container e rentabilidade de cada lote importado</div>
+        </div>
+        <button class="btn p" onclick="openContainerModal()">+ Novo Container</button>
+      </div>
+      <div id="containers-list"></div>
+    </div>
+
     <!-- FINANCEIRO -->
     <div id="page-financeiro" class="hidden">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
@@ -300,6 +322,13 @@ table tr:hover td{background:var(--b2);}
             <button class="btn sm p" onclick="openFixedExpModal()">+ Adicionar</button>
           </div>
           <div id="fin-fixed-list"></div>
+        </div>
+        <div>
+          <div class="sec" style="display:flex;justify-content:space-between;align-items:center">
+            <span>Gastos gerais (avulsos)</span>
+            <button class="btn sm p" onclick="openGeneralExpModal()">+ Lançar</button>
+          </div>
+          <div id="fin-general-list"></div>
         </div>
         <div>
           <div class="sec">Recomendação do sistema</div>
@@ -445,10 +474,17 @@ table tr:hover td{background:var(--b2);}
         </div>
       </div>
       <div class="fi"><label>Preço/sqft ($)</label><input id="fp" type="number" min="0" step="0.01"></div>
+      <div class="fi"><label>Custo/sqft ($) <span style="font-size:10px;color:var(--t2)">(opcional)</span></label><input id="fc" type="number" min="0" step="0.01" placeholder="Custo de compra"></div>
       <div class="fi"><label>Status</label><select id="fst"><option value="available">Disponível</option><option value="consigned">Consignada</option><option value="reserved">Reservada</option><option value="sold">Vendida</option></select></div>
       <div class="fi"><label>Vendida/Reservada para</label><input id="fso"></div>
     </div>
-    <div class="fi" style="margin-top:10px"><label>Observações</label><textarea id="fob"></textarea></div>
+    <div class="fi" style="margin-top:10px">
+      <label>Container <span style="font-size:10px;color:var(--t2)">(opcional — para rastrear lucro por container)</span></label>
+      <select id="fcont" style="padding:7px 10px;border:.5px solid var(--br2);border-radius:var(--r);font-size:13px;background:var(--b1);color:var(--t1)">
+        <option value="">— Sem container —</option>
+      </select>
+    </div>
+    <div class="fi" style="margin-top:6px"><label>Observações</label><textarea id="fob"></textarea></div>
     <div class="ma">
       <button class="btn" onclick="closeM('sm')">Cancelar</button>
       <button class="btn p" id="ssb" onclick="saveSlab()">Salvar Chapa</button>
@@ -705,6 +741,36 @@ table tr:hover td{background:var(--b2);}
   </div>
 </div>
 
+<!-- MODAL CONTAINER -->
+<div id="container-modal" class="mb hidden">
+  <div class="mo" style="width:min(620px,96vw)">
+    <h3 id="container-modal-title">Novo Container</h3>
+    <div class="fg">
+      <div class="fi"><label>Nome / ID do Container *</label><input id="cont-name" placeholder="ex: Container #1, C-2024-01..."></div>
+      <div class="fi"><label>Data de chegada</label><input id="cont-date" type="date"></div>
+      <div class="fi" style="grid-column:span 2"><label>Descrição / Materiais incluídos</label><input id="cont-desc" placeholder="ex: Taj Mahal, Cristallo, Mont Blanc..."></div>
+    </div>
+    <div class="sec">Custos do Container (US$)</div>
+    <div class="fg">
+      <div class="fi"><label>💰 Custo do material</label><input id="cont-material" type="number" min="0" step="0.01" placeholder="0.00" oninput="calcContainerTotal()"></div>
+      <div class="fi"><label>🚢 Frete internacional</label><input id="cont-freight" type="number" min="0" step="0.01" placeholder="0.00" oninput="calcContainerTotal()"></div>
+      <div class="fi"><label>🏛 Imposto / Import duty</label><input id="cont-import" type="number" min="0" step="0.01" placeholder="0.00" oninput="calcContainerTotal()"></div>
+      <div class="fi"><label>🤝 Broker / Despachante</label><input id="cont-broker" type="number" min="0" step="0.01" placeholder="0.00" oninput="calcContainerTotal()"></div>
+      <div class="fi"><label>🚛 Frete interno / Entrega</label><input id="cont-delivery" type="number" min="0" step="0.01" placeholder="0.00" oninput="calcContainerTotal()"></div>
+      <div class="fi"><label>📌 Outros custos</label><input id="cont-other" type="number" min="0" step="0.01" placeholder="0.00" oninput="calcContainerTotal()"></div>
+    </div>
+    <div style="background:var(--b2);border-radius:var(--r);padding:12px;margin-top:10px;display:flex;justify-content:space-between;align-items:center">
+      <span style="font-weight:500">💼 Custo total do container:</span>
+      <span id="cont-total-display" style="font-size:20px;font-weight:700;color:var(--d)">$0.00</span>
+    </div>
+    <div class="fi" style="margin-top:10px"><label>Observações</label><textarea id="cont-obs" placeholder="Notas adicionais..."></textarea></div>
+    <div class="ma">
+      <button class="btn" onclick="closeM('container-modal')">Cancelar</button>
+      <button class="btn p" onclick="saveContainer()">Salvar Container</button>
+    </div>
+  </div>
+</div>
+
 <script>
 var SB='https://plsgcaiqmltljytchvvt.supabase.co';
 var SK='sb_publishable_QexQ4PIBOved8ajDR42xqQ_UbzeLhYL';
@@ -729,7 +795,7 @@ async function sbU(t,id,d){var r=await fetch(SB+'/rest/v1/'+t+'?id=eq.'+id,{meth
 async function sbD(t,id){var r=await fetch(SB+'/rest/v1/'+t+'?id=eq.'+id,{method:'DELETE',headers:H});if(!r.ok)throw new Error(await r.text());}
 async function sbUpsert(t,d){var r=await fetch(SB+'/rest/v1/'+t,{method:'POST',headers:Object.assign({},H,{'Prefer':'resolution=merge-duplicates'}),body:JSON.stringify(d)});if(!r.ok)throw new Error(await r.text());return r.json();}
 
-var slabs=[],invoices=[],clients=[],bills=[],fixedExps=[],finBalance=0,finBalanceDate='',locs=['Meta Surface','ZTX Surfaces','Pacific Shore','Hope Solutions','Escritório'];
+var slabs=[],invoices=[],clients=[],bills=[],fixedExps=[],generalExps=[],containers=[],finBalance=0,finBalanceDate='',locs=['Meta Surface','ZTX Surfaces','Pacific Shore','Hope Solutions','Escritório'];
 var editId=null,editInvId=null,editClientId=null,selLoc=null,selIds=[],curPhoto=null,eic=0;
 var cfg={name:'DILEAN MARBLES CORP',addr:'1661 E Sample Rd, Pompano Beach FL 33064',phone:'346 455 8150',email:'',bank:'Bank Of America, N.A.',acct:'8981 6729 0208',wire:'063100277',swift:'BOFAUS6S',zelle:'346 455 8150',bankAddr:'555 California St., San Francisco, CA 94104'};
 
@@ -791,6 +857,8 @@ async function init(){
         if(s.key==='clients'&&s.value)clients=s.value;
         if(s.key==='bills'&&s.value)bills=s.value;
         if(s.key==='fixedExps'&&s.value)fixedExps=s.value;
+        if(s.key==='generalExps'&&s.value)generalExps=s.value;
+        if(s.key==='containers'&&s.value)containers=s.value;
         if(s.key==='finBalance'&&s.value){finBalance=s.value.amount||0;finBalanceDate=s.value.date||'';}
       });
     }
@@ -958,6 +1026,7 @@ function rebuildSels(){
   var ms=document.getElementById('fm');var cm=ms?ms.value:'';
   if(ms){ms.innerHTML='<option value="">Todos os materiais</option>';getMats().forEach(function(m){var o=document.createElement('option');o.value=m;o.textContent=m;ms.appendChild(o);});if(cm)ms.value=cm;}
   rebuildClientSel();
+  rebuildContainerSel();
 }
 function openAL(){document.getElementById('nln').value='';document.getElementById('alm').classList.remove('hidden');}
 async function saveNL(){
@@ -983,13 +1052,13 @@ function calcStats(){
     so=slabs.filter(function(s){return s.status==='sold';}).length,
     iv=slabs.reduce(function(a,s){return a+sv(s);},0),
     svv=slabs.filter(function(s){return s.status==='sold';}).reduce(function(a,s){return a+sv(s);},0),
-    // A receber: apenas invoices nao pagas
     ar=invoices.filter(function(i){return i.status!=='paid';}).reduce(function(a,i){return a+(i.total-i.paid);},0),
-    // Total faturado desde sempre
     billed=invoices.reduce(function(a,i){return a+i.total;},0),
-    // Total efetivamente recebido
-    received=invoices.reduce(function(a,i){return a+i.paid;},0);
-  return{total:t,avail:av,sold:so,inv:iv,soldV:svv,ar:ar,billed:billed,received:received};
+    received=invoices.reduce(function(a,i){return a+i.paid;},0),
+    // Profit calculation
+    totalCost=slabs.filter(function(s){return s.cost_per_sqft&&s.status==='sold';}).reduce(function(a,s){return a+(sqft(s)*(s.cost_per_sqft||0));},0),
+    profit=svv-totalCost;
+  return{total:t,avail:av,sold:so,inv:iv,soldV:svv,ar:ar,billed:billed,received:received,cost:totalCost,profit:profit};
 }
 function renderStats(){
   var s=calcStats();
@@ -1000,7 +1069,8 @@ function renderStats(){
     '<div class="sc"><div class="sl">Valor inventário</div><div class="sv">'+fmtI(s.inv)+'</div></div>'+
     '<div class="sc" style="border:.5px solid #85b7eb"><div class="sl">Total faturado (todas)</div><div class="sv bl">'+fmtI(s.billed)+'</div></div>'+
     '<div class="sc" style="border:.5px solid #97c459"><div class="sl">Total recebido</div><div class="sv g">'+fmtI(s.received)+'</div></div>'+
-    '<div class="sc" style="border:.5px solid #f09595"><div class="sl">A receber (em aberto)</div><div class="sv r">'+fmtI(s.ar)+'</div></div>';
+    '<div class="sc" style="border:.5px solid #f09595"><div class="sl">A receber (em aberto)</div><div class="sv r">'+fmtI(s.ar)+'</div></div>'+
+    '<div class="sc" style="border:.5px solid #97c459"><div class="sl" style="color:#2a6049">Lucro bruto (vendas)</div><div class="sv g">'+fmtI(s.profit)+'</div></div>';
 }
 
 // ── TABELA ────────────────────────────────────────────
@@ -1117,7 +1187,9 @@ function openSM(id){
   document.getElementById('fmat').value=s?s.material:'';document.getElementById('fty').value=s?s.type:'Quartzito';
   document.getElementById('fw').value=s?s.width:'';document.getElementById('fh').value=s?s.height:'';
   document.getElementById('floc').value=s?s.location:locs[0];document.getElementById('fp').value=s?s.price_per_sqft:'';
-  document.getElementById('fst').value=s?s.status:'available';document.getElementById('fso').value=s?s.sold_to||'':'';
+  if(document.getElementById('fc'))document.getElementById('fc').value=s&&s.cost_per_sqft?s.cost_per_sqft:'';
+  document.getElementById('fst').value=s?s.status:'available';
+  setTimeout(function(){if(document.getElementById('fcont'))document.getElementById('fcont').value=s&&s.container_id?s.container_id:'';},50);document.getElementById('fso').value=s?s.sold_to||'':'';
   document.getElementById('fob').value=s?s.obs||'':'';document.getElementById('pf').value='';
   document.getElementById('ms').style.display='none';
   if(s&&s.photo){document.getElementById('pp').src=s.photo;document.getElementById('pp').style.display='block';document.getElementById('pl').style.display='none';}
@@ -1131,7 +1203,9 @@ async function saveSlab(){
   var d={id:editId||uid(),lot:lot,num:num,material:mat,type:document.getElementById('fty').value,
     width:parseFloat(document.getElementById('fw').value)||null,height:parseFloat(document.getElementById('fh').value)||null,
     location:document.getElementById('floc').value,price_per_sqft:parseFloat(document.getElementById('fp').value)||null,
-    status:document.getElementById('fst').value,sold_to:document.getElementById('fso').value.trim()||null,
+    cost_per_sqft:parseFloat(document.getElementById('fc')?document.getElementById('fc').value:0)||null,
+    status:document.getElementById('fst').value,
+    container_id:document.getElementById('fcont')?document.getElementById('fcont').value||null:null,sold_to:document.getElementById('fso').value.trim()||null,
     obs:document.getElementById('fob').value.trim()||null,photo:curPhoto||null};
   try{
     sync('spin','Salvando...');
@@ -1175,7 +1249,19 @@ async function openD(id){
     '<div class="kv"><span class="kk">Dimensões</span><span class="kval">'+(s.width&&s.height?s.width+'" × '+s.height+'"':'—')+'</span></div>'+
     '<div class="kv"><span class="kk">Sqft</span><span class="kval">'+(sf?sf.toFixed(2)+' sqft':'—')+'</span></div>'+
     '<div class="kv"><span class="kk">Preço/sqft</span><span class="kval">'+(s.price_per_sqft?'$'+s.price_per_sqft:'—')+'</span></div>'+
-    '<div class="kv"><span class="kk">Valor total</span><span class="kval">'+(tv?fmt(tv):'—')+'</span></div>'+
+    (s.cost_per_sqft?'<div class="kv"><span class="kk">Custo/sqft</span><span class="kval">$'+s.cost_per_sqft+'</span></div>':'')+
+    '<div class="kv"><span class="kk">Valor total (venda)</span><span class="kval">'+(tv?fmt(tv):'—')+'</span></div>'+
+    (function(){
+      var sf2=sqft(s);
+      if(s.cost_per_sqft&&sf2){
+        var cost=+(sf2*s.cost_per_sqft).toFixed(2);
+        var profit=+(tv-cost).toFixed(2);
+        var margin=tv>0?((profit/tv)*100).toFixed(1):0;
+        return '<div class="kv"><span class="kk">Custo total</span><span class="kval r">'+fmt(cost)+'</span></div>'+
+               '<div class="kv"><span class="kk">Lucro bruto</span><span class="kval g">'+fmt(profit)+' ('+margin+'%)</span></div>';
+      }
+      return '';
+    })()+
     '<div class="kv"><span class="kk">Status</span><span class="kval">'+badge(s.status)+'</span></div>'+
     (s.sold_to?'<div class="kv"><span class="kk">Vendida para</span><span class="kval">'+s.sold_to+'</span></div>':'')+
     (relInv?'<div class="kv"><span class="kk">Invoice</span><span class="kval" style="color:var(--a);">'+relInv.num+' — '+relInv.date+'</span></div>':'')+
@@ -1864,7 +1950,10 @@ function printSlabReport(){
 
   // Group by material + lot
   var groups = {};
-  slabs.forEach(function(s){
+  var statusFilter = document.getElementById('report-status-filter')?document.getElementById('report-status-filter').value:'';
+  var slabsToReport = statusFilter ? slabs.filter(function(s){return s.status===statusFilter;}) : slabs;
+  var filterLabel = statusFilter ? {available:'Disponíveis',sold:'Vendidas',consigned:'Consignadas',reserved:'Reservadas'}[statusFilter] : 'Todos os status';
+  slabsToReport.forEach(function(s){
     var key = s.material + '||' + s.lot;
     if(!groups[key]) groups[key] = {material:s.material, lot:s.lot, type:s.type||'', slabs:[]};
     groups[key].slabs.push(s);
@@ -1875,6 +1964,7 @@ function printSlabReport(){
   var totalSlabs = 0, totalAvail = 0, totalSold = 0, totalCons = 0, totalRes = 0;
   var totalSqft = 0, totalValue = 0;
 
+  // Apply filter label to report title
   Object.values(groups).sort(function(a,b){
     return (a.material+a.lot).localeCompare(b.material+b.lot);
   }).forEach(function(g){
@@ -1929,6 +2019,7 @@ function printSlabReport(){
     '</div>'+
     '<div style="text-align:right">'+
     '<div style="font-size:18px;font-weight:700;color:#1a5c3a">RELATÓRIO DE ESTOQUE</div>'+
+    '<div style="font-size:11px;color:#666;margin-top:2px">Filtro: '+filterLabel+'</div>'+
     '<div style="font-size:11px;color:#666;margin-top:3px">Gerado em: '+now.toLocaleDateString('pt-BR')+' às '+now.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})+'</div>'+
     '</div></div>'+
 
@@ -2365,12 +2456,11 @@ function renderAlerts(){
 
   // ── Invoices vencidas
   var overdueInvs = invoices.filter(function(i){
+    // Só considera vencida se TEM data de vencimento E está no passado
     return i.status!=='paid' && i.due_date && i.due_date < today;
   });
-  // Also check invoices without due_date but older than 30 days
-  var oldInvs = invoices.filter(function(i){
-    return i.status!=='paid' && !i.due_date && i.date && i.date < new Date(Date.now()-30*24*60*60*1000).toISOString().slice(0,10);
-  });
+  // Invoices sem data de vencimento NÃO são consideradas vencidas automaticamente
+  var oldInvs = [];
 
   if(overdueInvs.length||oldInvs.length){
     count += overdueInvs.length + oldInvs.length;
@@ -2957,9 +3047,35 @@ function renderFinanceiro(){
     }
   }
 
+  // General expenses list
+  var geEl = document.getElementById('fin-general-list');
+  if(geEl){
+    if(!generalExps.length){
+      geEl.innerHTML='<div style="padding:12px;color:var(--t2);font-size:12px">Nenhum gasto geral lançado.</div>';
+    } else {
+      var GE_CAT={fuel:'⛽ Combustível',hotel:'🏨 Hotel',tools:'🔧 Ferramentas',food:'🍽 Alimentação',freight:'🚚 Frete',other:'📌 Outro'};
+      var totalGE=generalExps.reduce(function(a,ge){return a+ge.amount;},0);
+      geEl.innerHTML=generalExps.slice(0,10).map(function(ge){
+        return'<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:.5px solid var(--br1)">'+
+          '<div>'+
+          '<div style="font-size:12px;font-weight:500">'+(GE_CAT[ge.cat]||ge.cat)+' '+ge.desc+'</div>'+
+          '<div style="font-size:11px;color:var(--t2)">'+ge.date+(ge.obs?' · '+ge.obs:'')+'</div>'+
+          '</div>'+
+          '<div style="display:flex;align-items:center;gap:8px">'+
+          '<span style="font-weight:600;color:var(--d)">'+fmt(ge.amount)+'</span>'+
+          '<button class="btn sm" onclick="openGeneralExpModal(this.dataset.id)" data-id="'+ge.id+'">✏</button>'+
+          '<button class="btn sm dn" onclick="deleteGeneralExp(this.dataset.id)" data-id="'+ge.id+'">✕</button>'+
+          '</div></div>';
+      }).join('')+
+      (generalExps.length>10?'<div style="font-size:11px;color:var(--t2);padding:6px 0">...e mais '+(generalExps.length-10)+' lançamentos</div>':'')+
+      '<div style="display:flex;justify-content:space-between;padding:7px 0;font-size:12px;font-weight:600">'+
+      '<span>Total lançado</span><span style="color:var(--d)">'+fmt(totalGE)+'</span></div>';
+    }
+  }
+
   // Build projections
-  var events30 = buildCashFlow(30);
-  var events90 = buildCashFlow(90);
+  var events30 = buildCashFlowFull(30);
+  var events90 = buildCashFlowFull(90);
 
   var bal30 = balance + events30.reduce(function(a,e){return a+e.amount;},0);
   var bal90 = balance + events90.reduce(function(a,e){return a+e.amount;},0);
@@ -3020,7 +3136,7 @@ function renderFinanceiro(){
   var cfEl = document.getElementById('fin-cashflow');
   if(!cfEl)return;
 
-  var events = buildCashFlow(90);
+  var events = buildCashFlowFull(90);
   if(!events.length && !balance){
     cfEl.innerHTML='<div class="empty">Insira o saldo atual e cadastre gastos fixos para ver o fluxo de caixa.</div>';
     return;
@@ -3068,7 +3184,7 @@ function renderFinanceiro(){
 function printFinancialPlan(){
   var balance = parseFloat(document.getElementById('fin-balance')?document.getElementById('fin-balance').value:0)||finBalance||0;
   var now = new Date();
-  var events = buildCashFlow(90);
+  var events = buildCashFlowFull(90);
 
   // Totals
   var rec30 = 0, pay30 = 0, rec90 = 0, pay90 = 0;
@@ -3187,7 +3303,7 @@ function printFinancialPlan(){
     '</tr></tbody></table></div>':'') +
 
     // Cash flow
-    '<div style="font-size:13px;font-weight:700;color:#1a5c3a;padding:8px 0;border-bottom:2px solid #1a5c3a;margin-bottom:8px">FLUXO DE CAIXA — PRÓXIMOS 90 DIAS</div>'+
+    '<div style="font-size:13px;font-weight:700;color:#1a5c3a;padding:8px 0;border-bottom:2px solid #1a5c3a;margin-bottom:8px">FLUXO DE CAIXA — PRÓXIMOS 90 DIAS <span style="font-size:10px;font-weight:400;color:#666">(💰 recebimentos · 📤 a pagar · 🔄 fixos · 💸 gerais)</span></div>'+
     '<table style="width:100%;border-collapse:collapse;font-size:11px">'+
     '<thead><tr style="background:#1a5c3a;color:#fff">'+
     '<th style="padding:6px 10px;text-align:left">Prazo</th>'+
@@ -3331,15 +3447,375 @@ function openClientLedger(invIdOrClientName){
   window.print();
 }
 
+// ── GASTOS GERAIS (avulsos) ───────────────────────────
+var editGeId = null;
+
+function openGeneralExpModal(id){
+  editGeId = id||null;
+  var ge = id?generalExps.find(function(x){return x.id===id;}):null;
+
+  var existing = document.getElementById('ge-modal');
+  if(existing)existing.remove();
+
+  var div = document.createElement('div');
+  div.id = 'ge-modal';
+  div.className = 'mb';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:300';
+  div.innerHTML = '<div class="mo" style="width:min(500px,96vw)">'+
+    '<h3>'+(ge?'Editar Gasto':'Lançar Gasto Geral')+'</h3>'+
+    '<div class="fg">'+
+    '<div class="fi" style="grid-column:span 2"><label>Descrição *</label><input id="ge-desc" placeholder="ex: Combustível, Hotel, Ferramentas..." value="'+(ge?ge.desc||'':'')+'"></div>'+
+    '<div class="fi"><label>Valor ($) *</label><input id="ge-amount" type="number" min="0" step="0.01" value="'+(ge?ge.amount||'':'')+'"></div>'+
+    '<div class="fi"><label>Data *</label><input id="ge-date" type="date" value="'+(ge?ge.date:new Date().toISOString().slice(0,10))+'"></div>'+
+    '<div class="fi"><label>Categoria</label><select id="ge-cat">'+
+    '<option value="fuel"'+(ge&&ge.cat==='fuel'?' selected':'')+'>Combustível</option>'+
+    '<option value="hotel"'+(ge&&ge.cat==='hotel'?' selected':'')+'>Hotel / Estadia</option>'+
+    '<option value="tools"'+(ge&&ge.cat==='tools'?' selected':'')+'>Ferramentas / Materiais</option>'+
+    '<option value="food"'+(ge&&ge.cat==='food'?' selected':'')+'>Alimentação</option>'+
+    '<option value="freight"'+(ge&&ge.cat==='freight'?' selected':'')+'>Frete / Transporte</option>'+
+    '<option value="other"'+(ge&&ge.cat==='other'?' selected':'')+'>Outro</option>'+
+    '</select></div>'+
+    '<div class="fi" style="grid-column:span 2"><label>Observação</label><input id="ge-obs" placeholder="Detalhe adicional..." value="'+(ge?ge.obs||'':'')+'"></div>'+
+    '</div>'+
+    '<div class="ma">'+
+    '<button class="btn" onclick="document.getElementById(&quot;ge-modal&quot;).remove()">Cancelar</button>'+
+    '<button class="btn p" onclick="saveGeneralExp(&quot;'+(id||'')+'"+"&quot;)">Salvar</button>'+
+    '</div></div>';
+  document.body.appendChild(div);
+  div.addEventListener('click',function(e){if(e.target===div)div.remove();});
+  setTimeout(function(){var el=document.getElementById('ge-desc');if(el)el.focus();},100);
+}
+
+async function saveGeneralExp(existingId){
+  var desc = document.getElementById('ge-desc').value.trim();
+  var amount = parseFloat(document.getElementById('ge-amount').value)||0;
+  var date = document.getElementById('ge-date').value;
+  if(!desc||!amount||!date){alert('Preencha todos os campos obrigatórios.');return;}
+  var ge = {
+    id: existingId||uid(),
+    desc: desc,
+    amount: amount,
+    date: date,
+    cat: document.getElementById('ge-cat').value,
+    obs: document.getElementById('ge-obs').value.trim()
+  };
+  if(existingId) generalExps=generalExps.map(function(x){return x.id===existingId?ge:x;});
+  else generalExps.push(ge);
+  generalExps.sort(function(a,b){return b.date.localeCompare(a.date);});
+  await saveSetting('generalExps',generalExps);
+  var modal=document.getElementById('ge-modal');if(modal)modal.remove();
+  renderFinanceiro();
+}
+
+async function deleteGeneralExp(id){
+  if(!confirm('Excluir este lançamento?'))return;
+  generalExps=generalExps.filter(function(x){return x.id!==id;});
+  await saveSetting('generalExps',generalExps);
+  renderFinanceiro();
+}
+
+// ── IMPROVED CASH FLOW (includes receivables) ─────────
+function buildCashFlowFull(days){
+  var today = new Date(); today.setHours(0,0,0,0);
+  var events = [];
+
+  // 1. Invoices a receber — sempre aparecem no fluxo
+  invoices.forEach(function(inv){
+    if(inv.status==='paid')return;
+    var saldo = inv.total - inv.paid;
+    if(saldo<=0)return;
+    var dueDate = inv.due_date ? new Date(inv.due_date) : null;
+    var diff = dueDate ? Math.round((dueDate-today)/(1000*60*60*24)) : 0;
+    var isOverdue = dueDate && diff < 0; // só vencida se TEM data E está no passado
+    // Inclui sempre: com data (dentro dos 90 dias ou vencida) ou sem data (mostra como pendente hoje)
+    if(!dueDate || diff<=days){
+      events.push({
+        date: dueDate||today,
+        diff: dueDate?diff:0,
+        type: 'receivable',
+        amount: saldo,
+        label: inv.num+' — '+inv.client+(isOverdue?' ⚠️ vencida':''),
+        color: '#2a6049', icon: '💰',
+        overdue: isOverdue
+      });
+    }
+  });
+
+  // 2. Contas a pagar
+  bills.forEach(function(b){
+    if(b.status==='paid')return;
+    var dueDate = new Date(b.due); dueDate.setHours(0,0,0,0);
+    var diff = Math.round((dueDate-today)/(1000*60*60*24));
+    if(diff<=days){
+      events.push({date:dueDate,diff:diff,type:'payable',amount:-b.amount,
+        label:b.desc,color:'#a32d2d',icon:'📤',overdue:diff<0});
+    }
+  });
+
+  // 3. Gastos fixos
+  fixedExps.forEach(function(fe){
+    var interval = fe.freq==='weekly'?7:fe.freq==='biweekly'?14:30;
+    for(var d=0;d<=days;d+=interval){
+      var dt = new Date(today); dt.setDate(dt.getDate()+d);
+      if(fe.day&&fe.freq==='monthly'){
+        dt = new Date(today.getFullYear(), today.getMonth()+(Math.floor(d/30)), fe.day);
+        if(dt<today)dt.setMonth(dt.getMonth()+1);
+        if(Math.round((dt-today)/(1000*60*60*24))>days)break;
+      }
+      events.push({date:new Date(dt),diff:Math.round((dt-today)/(1000*60*60*24)),
+        type:'fixed',amount:-fe.amount,label:fe.desc,color:'#854f0b',icon:'🔄',overdue:false});
+      if(fe.freq==='monthly')break;
+    }
+  });
+
+  // 4. Gastos gerais futuros (data >= hoje)
+  generalExps.forEach(function(ge){
+    var dt = new Date(ge.date); dt.setHours(0,0,0,0);
+    var diff = Math.round((dt-today)/(1000*60*60*24));
+    if(diff>=0&&diff<=days){
+      events.push({date:dt,diff:diff,type:'general',amount:-ge.amount,
+        label:ge.desc,color:'#6b3fa0',icon:'💸',overdue:false});
+    }
+  });
+
+  events.sort(function(a,b){return a.date-b.date||a.amount-b.amount;});
+  return events;
+}
+
+// ══════════════════════════════════════════════════════
+// CONTAINERS — GESTÃO DE LOTES IMPORTADOS
+// ══════════════════════════════════════════════════════
+var editContId = null;
+
+function calcContainerTotal(){
+  var fields = ['cont-material','cont-freight','cont-import','cont-broker','cont-delivery','cont-other'];
+  var total = fields.reduce(function(a,id){
+    var el=document.getElementById(id);return a+(el?parseFloat(el.value)||0:0);
+  },0);
+  var el=document.getElementById('cont-total-display');
+  if(el)el.textContent=fmt(total);
+}
+
+function openContainerModal(id){
+  editContId=id||null;
+  var c=id?containers.find(function(x){return x.id===id;}):null;
+  document.getElementById('container-modal-title').textContent=c?'Editar Container':'Novo Container';
+  document.getElementById('cont-name').value=c?c.name||'':'';
+  document.getElementById('cont-date').value=c?c.date||'':'';
+  document.getElementById('cont-desc').value=c?c.desc||'':'';
+  document.getElementById('cont-material').value=c?c.costs.material||'':'';
+  document.getElementById('cont-freight').value=c?c.costs.freight||'':'';
+  document.getElementById('cont-import').value=c?c.costs.importDuty||'':'';
+  document.getElementById('cont-broker').value=c?c.costs.broker||'':'';
+  document.getElementById('cont-delivery').value=c?c.costs.delivery||'':'';
+  document.getElementById('cont-other').value=c?c.costs.other||'':'';
+  document.getElementById('cont-obs').value=c?c.obs||'':'';
+  calcContainerTotal();
+  document.getElementById('container-modal').classList.remove('hidden');
+}
+
+async function saveContainer(){
+  var name=document.getElementById('cont-name').value.trim();
+  if(!name){alert('Nome obrigatório.');return;}
+  var costs={
+    material:parseFloat(document.getElementById('cont-material').value)||0,
+    freight:parseFloat(document.getElementById('cont-freight').value)||0,
+    importDuty:parseFloat(document.getElementById('cont-import').value)||0,
+    broker:parseFloat(document.getElementById('cont-broker').value)||0,
+    delivery:parseFloat(document.getElementById('cont-delivery').value)||0,
+    other:parseFloat(document.getElementById('cont-other').value)||0
+  };
+  var total=Object.values(costs).reduce(function(a,b){return a+b;},0);
+  var c={
+    id:editContId||uid(),
+    name:name,
+    date:document.getElementById('cont-date').value,
+    desc:document.getElementById('cont-desc').value.trim(),
+    costs:costs,
+    totalCost:total,
+    obs:document.getElementById('cont-obs').value.trim()
+  };
+  if(editContId)containers=containers.map(function(x){return x.id===editContId?c:x;});
+  else containers.push(c);
+  sync('spin','Salvando...');
+  await saveSetting('containers',containers);
+  sync('ok','Salvo');
+  closeM('container-modal');
+  rebuildContainerSel();
+  renderContainers();
+}
+
+async function deleteContainer(id){
+  if(!confirm('Excluir este container? As chapas vinculadas perderão o vínculo.'))return;
+  containers=containers.filter(function(x){return x.id!==id;});
+  // Remove container_id from linked slabs
+  var toUpdate=slabs.filter(function(s){return s.container_id===id;});
+  for(var i=0;i<toUpdate.length;i++){
+    toUpdate[i].container_id=null;
+    try{await sbU('slabs',toUpdate[i].id,{container_id:null});}catch(e){}
+  }
+  await saveSetting('containers',containers);
+  rebuildContainerSel();
+  renderContainers();
+}
+
+function rebuildContainerSel(){
+  var el=document.getElementById('fcont');
+  if(!el)return;
+  var cur=el.value;
+  el.innerHTML='<option value="">— Sem container —</option>';
+  containers.forEach(function(c){
+    var o=document.createElement('option');o.value=c.id;o.textContent=c.name;el.appendChild(o);
+  });
+  if(cur)el.value=cur;
+}
+
+function getContainerStats(c){
+  var contSlabs=slabs.filter(function(s){return s.container_id===c.id;});
+  var totalSlabs=contSlabs.length;
+  var soldSlabs=contSlabs.filter(function(s){return s.status==='sold';});
+  var availSlabs=contSlabs.filter(function(s){return s.status==='available';});
+  var consSlabs=contSlabs.filter(function(s){return s.status==='consigned';});
+
+  // Revenue from sold slabs
+  var revenue=soldSlabs.reduce(function(a,s){
+    var sf=(s.width&&s.height)?+((s.width*s.height)/144):0;
+    return a+(sf*(s.price_per_sqft||0));
+  },0);
+
+  // Projected revenue (all slabs at their price)
+  var projRevenue=contSlabs.reduce(function(a,s){
+    var sf=(s.width&&s.height)?+((s.width*s.height)/144):0;
+    return a+(sf*(s.price_per_sqft||0));
+  },0);
+
+  var totalCost=c.totalCost||0;
+  var recovered=totalCost>0?Math.min(100,(revenue/totalCost*100)):0;
+  var netProfit=revenue-totalCost;
+  var projProfit=projRevenue-totalCost;
+  var margin=projRevenue>0?(projProfit/projRevenue*100):0;
+
+  return{
+    totalSlabs:totalSlabs,sold:soldSlabs.length,avail:availSlabs.length,cons:consSlabs.length,
+    revenue:revenue,projRevenue:projRevenue,
+    recovered:recovered,netProfit:netProfit,projProfit:projProfit,margin:margin,
+    allSold:totalSlabs>0&&soldSlabs.length===totalSlabs
+  };
+}
+
+function renderContainers(){
+  var el=document.getElementById('containers-list');
+  if(!containers.length){
+    el.innerHTML='<div class="empty" style="padding:48px">'+
+      '<div style="font-size:40px;margin-bottom:12px">📦</div>'+
+      '<div style="font-size:15px;font-weight:500;margin-bottom:8px">Nenhum container cadastrado</div>'+
+      '<div style="font-size:13px;margin-bottom:16px">Cadastre seus containers para rastrear custos e lucro por lote importado</div>'+
+      '<button class="btn p" onclick="openContainerModal()">+ Cadastrar primeiro container</button>'+
+      '</div>';
+    return;
+  }
+
+  el.innerHTML=containers.map(function(c){
+    var s=getContainerStats(c);
+    var statusColor=s.allSold?'#2a6049':s.recovered>=100?'#2a6049':s.recovered>=50?'#854f0b':'#a32d2d';
+    var statusLabel=s.allSold?'✅ Concluído':s.recovered>=100?'✅ Custo recuperado':'📊 Em andamento';
+
+    // Cost breakdown
+    var costRows='';
+    var costLabels={material:'💰 Material',freight:'🚢 Frete internacional',importDuty:'🏛 Importação/Imposto',broker:'🤝 Broker/Despachante',delivery:'🚛 Frete interno',other:'📌 Outros'};
+    Object.keys(c.costs).forEach(function(k){
+      if(c.costs[k]>0){
+        costRows+='<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0">'+
+          '<span style="color:var(--t2)">'+costLabels[k]+'</span>'+
+          '<span>'+fmt(c.costs[k])+'</span></div>';
+      }
+    });
+
+    // Progress bar
+    var pct=Math.min(100,s.recovered);
+    var barColor=s.recovered>=100?'#2a6049':s.recovered>=50?'#f5a623':'#a32d2d';
+
+    return'<div style="border:.5px solid var(--br1);border-radius:var(--rl);padding:16px;margin-bottom:16px">'+
+      // Header
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;flex-wrap:wrap;gap:8px">'+
+      '<div>'+
+      '<div style="font-size:16px;font-weight:600">📦 '+c.name+'</div>'+
+      (c.desc?'<div style="font-size:12px;color:var(--t2);margin-top:3px">'+c.desc+'</div>':'')+
+      (c.date?'<div style="font-size:11px;color:var(--t2)">Chegada: '+c.date+'</div>':'')+
+      '</div>'+
+      '<div style="display:flex;gap:8px;align-items:center">'+
+      '<span style="padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;background:'+(s.allSold?'#eaf3de':s.recovered>=100?'#eaf3de':'var(--b2)')+';color:'+statusColor+'">'+statusLabel+'</span>'+
+      '<button class="btn sm" onclick="openContainerModal(this.dataset.id)" data-id="'+c.id+'">✏ Editar</button>'+
+      '<button class="btn sm dn" onclick="deleteContainer(this.dataset.id)" data-id="'+c.id+'">Excluir</button>'+
+      '</div></div>'+
+
+      // Main stats grid
+      '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:14px">'+
+      '<div style="background:var(--b2);border-radius:var(--r);padding:10px;text-align:center">'+
+      '<div style="font-size:10px;color:var(--t2);text-transform:uppercase;font-weight:600;margin-bottom:4px">Custo total</div>'+
+      '<div style="font-size:18px;font-weight:700;color:var(--d)">'+fmt(c.totalCost)+'</div>'+
+      '</div>'+
+      '<div style="background:var(--b2);border-radius:var(--r);padding:10px;text-align:center">'+
+      '<div style="font-size:10px;color:var(--t2);text-transform:uppercase;font-weight:600;margin-bottom:4px">Receita atual</div>'+
+      '<div style="font-size:18px;font-weight:700;color:#2a6049">'+fmt(s.revenue)+'</div>'+
+      '</div>'+
+      '<div style="background:'+(s.netProfit>=0?'#eaf3de':'#fff5f5')+';border-radius:var(--r);padding:10px;text-align:center">'+
+      '<div style="font-size:10px;color:var(--t2);text-transform:uppercase;font-weight:600;margin-bottom:4px">'+(s.allSold?'Lucro líquido':'Lucro projetado')+'</div>'+
+      '<div style="font-size:18px;font-weight:700;color:'+(s.projProfit>=0?'#2a6049':'#a32d2d')+'">'+fmt(s.projProfit)+'</div>'+
+      '</div>'+
+      '<div style="background:var(--b2);border-radius:var(--r);padding:10px;text-align:center">'+
+      '<div style="font-size:10px;color:var(--t2);text-transform:uppercase;font-weight:600;margin-bottom:4px">Chapas</div>'+
+      '<div style="font-size:16px;font-weight:700">'+s.sold+'/'+s.totalSlabs+'</div>'+
+      '<div style="font-size:10px;color:var(--t2)">vendidas</div>'+
+      '</div>'+
+      '</div>'+
+
+      // Progress bar
+      '<div style="margin-bottom:14px">'+
+      '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px">'+
+      '<span style="color:var(--t2)">Custo recuperado pelas vendas</span>'+
+      '<span style="font-weight:600;color:'+barColor+'">'+s.recovered.toFixed(1)+'%</span>'+
+      '</div>'+
+      '<div style="height:8px;background:var(--b3);border-radius:4px;overflow:hidden">'+
+      '<div style="height:100%;border-radius:4px;background:'+barColor+';width:'+pct+'%;transition:width .5s"></div>'+
+      '</div>'+
+      (s.recovered<100?'<div style="font-size:11px;color:var(--t2);margin-top:4px">Falta '+fmt(c.totalCost-s.revenue)+' em vendas para cobrir o custo</div>':
+       '<div style="font-size:11px;color:#2a6049;margin-top:4px">✅ Custo totalmente recuperado! Cada venda agora é lucro puro.</div>')+
+      '</div>'+
+
+      // Two columns: cost breakdown + slab list
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">'+
+      '<div>'+
+      '<div style="font-size:11px;font-weight:600;color:var(--t2);text-transform:uppercase;margin-bottom:8px">Composição do custo</div>'+
+      costRows+
+      '<div style="display:flex;justify-content:space-between;font-size:12px;font-weight:600;padding-top:6px;border-top:.5px solid var(--br1);margin-top:4px">'+
+      '<span>Total</span><span style="color:var(--d)">'+fmt(c.totalCost)+'</span></div>'+
+      '</div>'+
+      '<div>'+
+      '<div style="font-size:11px;font-weight:600;color:var(--t2);text-transform:uppercase;margin-bottom:8px">Resumo das chapas</div>'+
+      '<div style="font-size:12px;line-height:2">'+
+      '<div style="display:flex;justify-content:space-between"><span>✓ Disponíveis</span><span class="g">'+s.avail+'</span></div>'+
+      '<div style="display:flex;justify-content:space-between"><span>⇄ Consignadas</span><span style="color:var(--i)">'+s.cons+'</span></div>'+
+      '<div style="display:flex;justify-content:space-between"><span>✗ Vendidas</span><span style="color:var(--d)">'+s.sold+'</span></div>'+
+      '<div style="display:flex;justify-content:space-between;border-top:.5px solid var(--br1);padding-top:4px;font-weight:600"><span>Total</span><span>'+s.totalSlabs+'</span></div>'+
+      (s.totalSlabs>0?'<div style="display:flex;justify-content:space-between"><span>Margem projetada</span><span style="color:'+(s.margin>=0?'#2a6049':'#a32d2d')+'">'+s.margin.toFixed(1)+'%</span></div>':'')+
+      '</div>'+
+      '</div></div>'+
+
+      '</div>';
+  }).join('');
+}
+
 function closeM(id){document.getElementById(id).classList.add('hidden');}
 document.querySelectorAll('.mb').forEach(function(m){m.addEventListener('click',function(e){if(e.target===m)m.classList.add('hidden');});});
 function showPage(p){
-  ['inventory','visual','invoices','report','clients','financeiro','transfer','alerts','bills','settings'].forEach(function(pg){document.getElementById('page-'+pg).classList.toggle('hidden',pg!==p);});
-  document.querySelectorAll('.nb').forEach(function(b,i){b.classList.toggle('active',['inventory','visual','invoices','report','clients','financeiro','transfer','alerts','bills','settings'][i]===p);});
+  ['inventory','visual','invoices','report','clients','containers','financeiro','transfer','alerts','bills','settings'].forEach(function(pg){document.getElementById('page-'+pg).classList.toggle('hidden',pg!==p);});
+  document.querySelectorAll('.nb').forEach(function(b,i){b.classList.toggle('active',['inventory','visual','invoices','report','clients','containers','financeiro','transfer','alerts','bills','settings'][i]===p);});
   if(p==='visual')renderVis();
   if(p==='invoices')renderInvoices();
   if(p==='report')renderReport();
   if(p==='clients')renderClientsList();
+  if(p==='containers'){renderContainers();}
   if(p==='financeiro'){renderFinanceiro();}
   if(p==='transfer'){initTransferPage();}
   if(p==='alerts')renderAlerts();
