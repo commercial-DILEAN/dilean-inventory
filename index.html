@@ -3406,132 +3406,163 @@ function openClientLedger(invIdOrClientName){
   var clientInvs = invoices.filter(function(i){return i.client===clientName;});
   if(!clientInvs.length){alert('Nenhuma invoice encontrada para '+clientName);return;}
 
-  clientInvs.sort(function(a,b){return (a.date||'').localeCompare(b.date||'');});
-
   var now = new Date();
-  var totalFaturado = 0, totalPago = 0;
-  var allInvSections = '';
+
+  // Build flat list of events sorted by date (like bank statement)
+  var events = [];
 
   clientInvs.forEach(function(inv){
-    totalFaturado += inv.total;
-    totalPago += inv.paid;
-    var saldo = inv.total - inv.paid;
+    // Invoice = debit (charged)
+    events.push({
+      date: inv.date||'',
+      type: 'invoice',
+      desc: 'Invoice '+inv.num,
+      charged: inv.total,
+      paid: 0
+    });
+
+    // Payments = credit
     var history = Array.isArray(inv.payment_history)?inv.payment_history:[];
-
-    // Sort history by date
-    var sortedHistory = history.slice().sort(function(a,b){return (a.date||'').localeCompare(b.date||'');});
-
-    // Build payment rows
-    var payRows = '';
-    var paidSoFar = 0;
-    if(sortedHistory.length){
-      sortedHistory.forEach(function(p,pi){
-        paidSoFar += p.amount;
-        var remaining = inv.total - paidSoFar;
-        payRows += '<tr style="background:#f8fdf8">'+
-          '<td style="padding:5px 10px 5px 28px;font-size:11px;color:#666">'+( p.date||'—')+'</td>'+
-          '<td style="padding:5px 10px;font-size:11px;color:#2a6049">'+
-            '↳ Pagamento #'+(pi+1)+(p.note?' — <em>'+p.note+'</em>':'')+'</td>'+
-          '<td style="padding:5px 10px;text-align:right;font-size:11px"></td>'+
-          '<td style="padding:5px 10px;text-align:right;font-size:11px;font-weight:600;color:#2a6049">'+fmt(p.amount)+'</td>'+
-          '<td style="padding:5px 10px;text-align:right;font-size:11px;font-weight:500;color:'+(remaining>0?'#a32d2d':'#2a6049')+'">'+fmt(remaining)+'</td>'+
-          '</tr>';
+    if(history.length){
+      history.forEach(function(p){
+        events.push({
+          date: p.date||inv.date||'',
+          type: 'payment',
+          desc: 'Payment — '+inv.num+(p.note?' ('+p.note+')':''),
+          charged: 0,
+          paid: p.amount
+        });
       });
     } else if(inv.paid>0){
-      payRows += '<tr style="background:#f8fdf8">'+
-        '<td style="padding:5px 10px 5px 28px;font-size:11px;color:#666">'+(inv.date||'—')+'</td>'+
-        '<td style="padding:5px 10px;font-size:11px;color:#2a6049">↳ Pagamento registrado</td>'+
-        '<td style="padding:5px 10px;text-align:right;font-size:11px"></td>'+
-        '<td style="padding:5px 10px;text-align:right;font-size:11px;font-weight:600;color:#2a6049">'+fmt(inv.paid)+'</td>'+
-        '<td style="padding:5px 10px;text-align:right;font-size:11px;color:'+(saldo>0?'#a32d2d':'#2a6049')+';font-weight:500">'+fmt(saldo)+'</td>'+
-        '</tr>';
+      events.push({
+        date: inv.date||'',
+        type: 'payment',
+        desc: 'Payment — '+inv.num,
+        charged: 0,
+        paid: inv.paid
+      });
     }
-
-    var stColor = inv.status==='paid'?'#3b6d11':inv.status==='partial'?'#854f0b':'#a32d2d';
-    var stBg = inv.status==='paid'?'#eaf3de':inv.status==='partial'?'#faeeda':'#fcebeb';
-    var stLabel = inv.status==='paid'?'✅ Pago':inv.status==='partial'?'⏳ Parcial':'🔴 Pendente';
-
-    allInvSections +=
-      // Invoice header row
-      '<tr style="background:#f0f7f3;border-top:2px solid #cde3d6">'+
-      '<td style="padding:8px 10px;font-size:12px;font-weight:700;color:#1a5c3a">'+(inv.date||'—')+'</td>'+
-      '<td style="padding:8px 10px;font-size:12px;font-weight:700">📄 Invoice '+inv.num+
-        ' <span style="font-weight:400;font-size:11px;color:#666">'+(inv.pay_type==='installments'?'(Parcelado)':inv.pay_type==='due30'?'(Net 30)':'')+'</span></td>'+
-      '<td style="padding:8px 10px;text-align:right;font-size:12px;font-weight:700;color:#a32d2d">'+fmt(inv.total)+'</td>'+
-      '<td style="padding:8px 10px;text-align:right;font-size:11px"></td>'+
-      '<td style="padding:8px 10px;text-align:right">'+
-        '<span style="padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;background:'+stBg+';color:'+stColor+'">'+stLabel+'</span></td>'+
-      '</tr>'+
-      payRows;
   });
 
-  var balanceDue = totalFaturado - totalPago;
+  // Sort by date ascending
+  events.sort(function(a,b){
+    if(!a.date&&!b.date)return 0;
+    if(!a.date)return 1;
+    if(!b.date)return -1;
+    return a.date.localeCompare(b.date);
+  });
 
-  var html = '<div style="font-family:Arial,sans-serif;color:#000;padding:28px;max-width:820px">'+
+  // Running balance and totals
+  var runBal = 0;
+  var totalCharged = 0, totalPaid = 0;
+
+  var rows = events.map(function(e, i){
+    runBal += e.charged - e.paid;
+    totalCharged += e.charged;
+    totalPaid += e.paid;
+
+    var isInv = e.type==='invoice';
+    var bg = i%2===0?'#fff':'#f9faf9';
+
+    // Format date
+    var dateFmt = '—';
+    if(e.date){
+      var dp = e.date.split('-');
+      if(dp.length===3) dateFmt = dp[1]+'/'+dp[2]+'/'+dp[0];
+    }
+
+    return '<tr style="background:'+bg+'">'+
+      '<td style="padding:7px 12px;font-size:11px;color:#555;white-space:nowrap">'+dateFmt+'</td>'+
+      '<td style="padding:7px 12px;font-size:12px">'+
+        '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+(isInv?'#a32d2d':'#2a6049')+';margin-right:6px;vertical-align:middle"></span>'+
+        e.desc+
+      '</td>'+
+      '<td style="padding:7px 12px;text-align:right;font-size:12px;color:#a32d2d;font-weight:'+(isInv?'600':'400')+'">'+
+        (e.charged>0?fmt(e.charged):'')+
+      '</td>'+
+      '<td style="padding:7px 12px;text-align:right;font-size:12px;color:#2a6049;font-weight:'+(isInv?'400':'600')+'">'+
+        (e.paid>0?fmt(e.paid):'')+
+      '</td>'+
+      '<td style="padding:7px 12px;text-align:right;font-size:13px;font-weight:700;color:'+(runBal>0.01?'#a32d2d':runBal<-0.01?'#2a6049':'#666')+'">'+
+        fmt(runBal)+
+      '</td>'+
+      '</tr>';
+  }).join('');
+
+  var balanceDue = totalCharged - totalPaid;
+
+  var html =
+    '<div style="font-family:Arial,sans-serif;color:#000;padding:28px;max-width:780px">'+
+
     // Header
-    '<div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:12px;border-bottom:3px solid #1a5c3a;margin-bottom:16px">'+
-    '<div>'+
-    '<div style="font-size:20px;font-weight:700;color:#1a5c3a">DILEAN MARBLES CORP</div>'+
-    '<div style="font-size:11px;color:#666;margin-top:3px">1661 E Sample Rd, Pompano Beach FL 33064</div>'+
-    '<div style="font-size:11px;color:#666">Tel/Zelle: 346 455 8150</div>'+
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:14px;border-bottom:3px solid #1a5c3a;margin-bottom:18px">'+
+      '<div>'+
+        '<div style="font-size:20px;font-weight:700;color:#1a5c3a">DILEAN MARBLES CORP</div>'+
+        '<div style="font-size:11px;color:#666;margin-top:3px">1661 E Sample Rd, Pompano Beach FL 33064</div>'+
+        '<div style="font-size:11px;color:#666">Tel/Zelle: 346 455 8150</div>'+
+      '</div>'+
+      '<div style="text-align:right">'+
+        '<div style="font-size:18px;font-weight:700;color:#1a5c3a">ACCOUNT STATEMENT</div>'+
+        '<div style="font-size:11px;color:#666;margin-top:4px">'+clientName+'</div>'+
+        '<div style="font-size:11px;color:#666">Date: '+now.toLocaleDateString('en-US')+'</div>'+
+      '</div>'+
     '</div>'+
-    '<div style="text-align:right">'+
-    '<div style="font-size:18px;font-weight:700;color:#1a5c3a">ACCOUNT STATEMENT</div>'+
-    '<div style="font-size:11px;color:#666;margin-top:3px">Date: '+now.toLocaleDateString('en-US')+'</div>'+
-    '</div></div>'+
 
-    // Client + Summary
+    // Summary cards
     '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px">'+
-    '<div style="background:#f8faf8;border:1px solid #cde3d6;border-radius:6px;padding:10px 14px;grid-column:span 1">'+
-    '<div style="font-size:10px;font-weight:700;color:#1a5c3a;text-transform:uppercase;margin-bottom:4px">Bill To</div>'+
-    '<div style="font-size:14px;font-weight:700">'+clientName+'</div>'+
-    '<div style="font-size:11px;color:#666;margin-top:2px">'+clientInvs.length+' invoice(s)</div>'+
+      '<div style="background:#f0f7f3;border:1px solid #cde3d6;border-radius:6px;padding:12px;text-align:center">'+
+        '<div style="font-size:10px;font-weight:700;color:#2a6049;text-transform:uppercase;margin-bottom:4px">Total Invoiced</div>'+
+        '<div style="font-size:20px;font-weight:700;color:#1a5c3a">'+fmt(totalCharged)+'</div>'+
+        '<div style="font-size:11px;color:#666;margin-top:2px">'+clientInvs.length+' invoice(s)</div>'+
+      '</div>'+
+      '<div style="background:#f0f7f3;border:1px solid #97c459;border-radius:6px;padding:12px;text-align:center">'+
+        '<div style="font-size:10px;font-weight:700;color:#2a6049;text-transform:uppercase;margin-bottom:4px">Total Paid</div>'+
+        '<div style="font-size:20px;font-weight:700;color:#2a6049">'+fmt(totalPaid)+'</div>'+
+      '</div>'+
+      '<div style="background:'+(balanceDue>0.01?'#fff3f3':'#f0f7f3')+';border:2px solid '+(balanceDue>0.01?'#f09595':'#97c459')+';border-radius:6px;padding:12px;text-align:center">'+
+        '<div style="font-size:10px;font-weight:700;color:'+(balanceDue>0.01?'#a32d2d':'#2a6049')+';text-transform:uppercase;margin-bottom:4px">Balance Due</div>'+
+        '<div style="font-size:22px;font-weight:700;color:'+(balanceDue>0.01?'#a32d2d':'#2a6049')+'">'+fmt(balanceDue)+'</div>'+
+      '</div>'+
     '</div>'+
-    '<div style="background:#f0f7f3;border:1px solid #cde3d6;border-radius:6px;padding:10px 14px;text-align:center">'+
-    '<div style="font-size:10px;font-weight:700;color:#2a6049;text-transform:uppercase;margin-bottom:4px">Total Invoiced</div>'+
-    '<div style="font-size:18px;font-weight:700;color:#1a5c3a">'+fmt(totalFaturado)+'</div>'+
-    '</div>'+
-    '<div style="background:'+(balanceDue>0?'#fff3f3':'#f0f7f3')+';border:2px solid '+(balanceDue>0?'#f09595':'#97c459')+';border-radius:6px;padding:10px 14px;text-align:center">'+
-    '<div style="font-size:10px;font-weight:700;color:'+(balanceDue>0?'#a32d2d':'#2a6049')+';text-transform:uppercase;margin-bottom:4px">Balance Due</div>'+
-    '<div style="font-size:22px;font-weight:700;color:'+(balanceDue>0?'#a32d2d':'#2a6049')+'">'+fmt(balanceDue)+'</div>'+
-    '</div></div>'+
 
     // Ledger table
-    '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px">'+
-    '<thead><tr style="background:#1a5c3a;color:#fff">'+
-    '<th style="padding:7px 10px;text-align:left;width:95px">Date</th>'+
-    '<th style="padding:7px 10px;text-align:left">Description</th>'+
-    '<th style="padding:7px 10px;text-align:right;width:110px">Charged</th>'+
-    '<th style="padding:7px 10px;text-align:right;width:110px">Paid</th>'+
-    '<th style="padding:7px 10px;text-align:right;width:110px">Balance</th>'+
-    '</tr></thead><tbody>'+
-    allInvSections+
-    '</tbody></table>'+
+    '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:20px">'+
+      '<thead>'+
+        '<tr style="background:#1a5c3a;color:#fff">'+
+          '<th style="padding:8px 12px;text-align:left;width:90px">Date</th>'+
+          '<th style="padding:8px 12px;text-align:left">Description</th>'+
+          '<th style="padding:8px 12px;text-align:right;width:110px">Charged</th>'+
+          '<th style="padding:8px 12px;text-align:right;width:110px">Paid</th>'+
+          '<th style="padding:8px 12px;text-align:right;width:110px">Balance</th>'+
+        '</tr>'+
+      '</thead>'+
+      '<tbody>'+
+        rows+
+        '<tr style="background:#1a5c3a;color:#fff;font-weight:700">'+
+          '<td colspan="2" style="padding:8px 12px">TOTAL</td>'+
+          '<td style="padding:8px 12px;text-align:right">'+fmt(totalCharged)+'</td>'+
+          '<td style="padding:8px 12px;text-align:right">'+fmt(totalPaid)+'</td>'+
+          '<td style="padding:8px 12px;text-align:right">'+fmt(balanceDue)+'</td>'+
+        '</tr>'+
+      '</tbody>'+
+    '</table>'+
 
-    // Summary footer
-    '<div style="display:flex;justify-content:flex-end;margin-bottom:16px">'+
-    '<div style="min-width:320px;border:1px solid #cde3d6;border-radius:6px;overflow:hidden">'+
-    '<div style="display:flex;justify-content:space-between;padding:7px 14px;background:#f0f7f3;font-size:12px">'+
-    '<span>Total Invoiced</span><strong>'+fmt(totalFaturado)+'</strong></div>'+
-    '<div style="display:flex;justify-content:space-between;padding:7px 14px;font-size:12px;border-top:1px solid #e0ede6">'+
-    '<span>Total Paid</span><strong style="color:#2a6049">'+fmt(totalPago)+'</strong></div>'+
-    '<div style="display:flex;justify-content:space-between;padding:9px 14px;background:'+(balanceDue>0?'#fff3f3':'#f0f7f3')+';font-size:14px;font-weight:700;border-top:2px solid '+(balanceDue>0?'#f09595':'#97c459')+';color:'+(balanceDue>0?'#a32d2d':'#2a6049')+'">'+
-    '<span>Balance Due</span><span>'+fmt(balanceDue)+'</span></div>'+
-    '</div></div>'+
-
-    '<div style="background:#f8faf8;border:1px solid #cde3d6;border-radius:6px;padding:10px 14px;font-size:11px;margin-bottom:14px">'+
-    '<div style="font-weight:700;color:#1a5c3a;margin-bottom:6px">Payment Information</div>'+
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">'+
-    '<span><strong>Bank:</strong> Bank Of America, N.A.</span>'+
-    '<span><strong>Account:</strong> 8981 6729 0208</span>'+
-    '<span><strong>Wire/Routing:</strong> 063100277</span>'+
-    '<span><strong>SWIFT:</strong> BOFAUS6S</span>'+
-    '<span><strong>Zelle:</strong> 346 455 8150</span>'+
-    '</div></div>'+
+    // Payment info
+    '<div style="background:#f8faf8;border:1px solid #cde3d6;border-radius:6px;padding:12px 14px;font-size:11px;margin-bottom:14px">'+
+      '<div style="font-weight:700;color:#1a5c3a;margin-bottom:6px">Payment Information</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;line-height:1.8">'+
+        '<span><strong>Bank:</strong> Bank Of America, N.A.</span>'+
+        '<span><strong>Account:</strong> 8981 6729 0208</span>'+
+        '<span><strong>Wire/Routing:</strong> 063100277</span>'+
+        '<span><strong>SWIFT:</strong> BOFAUS6S</span>'+
+        '<span><strong>Zelle:</strong> 346 455 8150</span>'+
+      '</div>'+
+    '</div>'+
 
     '<div style="text-align:center;font-size:10px;color:#999;border-top:1px solid #e0e0e0;padding-top:8px">'+
-    'DILEAN MARBLES CORP — Account Statement — '+clientName+' — '+now.toLocaleDateString('en-US')+
-    '</div></div>';
+      'DILEAN MARBLES CORP — Account Statement — '+clientName+' — '+now.toLocaleDateString('en-US')+
+    '</div>'+
+    '</div>';
 
   document.getElementById('print-area').innerHTML = html;
   window.print();
