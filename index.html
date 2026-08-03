@@ -846,7 +846,13 @@ async function sbGetPhoto(id){
   return(d&&d[0])?d[0].photo:null;
 }
 async function sbI(t,d){var r=await fetch(SB+'/rest/v1/'+t,{method:'POST',headers:H,body:JSON.stringify(d)});if(!r.ok)throw new Error(await r.text());return r.json();}
-async function sbU(t,id,d){var r=await fetch(SB+'/rest/v1/'+t+'?id=eq.'+id,{method:'PATCH',headers:H,body:JSON.stringify(d)});if(!r.ok)throw new Error(await r.text());return r.json();}
+async function sbU(t,id,d){
+  var clean={};
+  Object.keys(d).forEach(function(k){clean[k]=(d[k]===''||d[k]===undefined)?null:d[k];});
+  var r=await fetch(SB+'/rest/v1/'+t+'?id=eq.'+id,{method:'PATCH',headers:H,body:JSON.stringify(clean)});
+  if(!r.ok)throw new Error(await r.text());
+  try{return r.json();}catch(e){return null;}
+}
 async function sbD(t,id){var r=await fetch(SB+'/rest/v1/'+t+'?id=eq.'+id,{method:'DELETE',headers:H});if(!r.ok)throw new Error(await r.text());}
 async function sbUpsert(t,d){var r=await fetch(SB+'/rest/v1/'+t,{method:'POST',headers:Object.assign({},H,{'Prefer':'resolution=merge-duplicates'}),body:JSON.stringify(d)});if(!r.ok)throw new Error(await r.text());return r.json();}
 
@@ -1434,7 +1440,10 @@ function openPaymentModal(invId){
   div.className='mb';
   div.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:300';
   div.innerHTML='<div class="mo" style="width:min(520px,96vw)">'+
-    '<h3>Registrar Pagamento</h3>'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'+
+    '<h3 style="margin:0">Registrar Pagamento</h3>'+
+    '<button class="btn sm dn" onclick="resetInvoicePayments(&quot;'+invId+'&quot;)" style="font-size:11px">🔄 Zerar pagamentos</button>'+
+    '</div>'+
     '<div style="background:var(--b2);border-radius:var(--r);padding:12px;margin-bottom:14px;font-size:13px;line-height:1.9">'+
     '<div><strong>Invoice:</strong> '+inv.num+' — '+inv.client+'</div>'+
     '<div><strong>Total faturado:</strong> '+fmt(inv.total)+'</div>'+
@@ -1577,7 +1586,7 @@ async function saveInv(){
   if(!num||!client){alert('Número e cliente são obrigatórios.');return;}
   var inv={id:editInvId||uid(),num:num,client:client,client_addr:document.getElementById('icla').value.trim(),
     date:document.getElementById('idat').value,
-    due_date:document.getElementById('idue')?document.getElementById('idue').value:null,total:parseFloat(document.getElementById('itot').value)||0,
+    due_date:(document.getElementById('idue')&&document.getElementById('idue').value)?document.getElementById('idue').value:null,total:parseFloat(document.getElementById('itot').value)||0,
     paid:parseFloat(document.getElementById('ipai').value)||0,status:document.getElementById('istat').value,
     slab_ids:selIds,extra_items:getEIs(),
     show_slab_details:document.getElementById('show-slab-details').checked,
@@ -4097,6 +4106,22 @@ async function editPaymentEntry(invId, idx){
     var modal=document.getElementById('pay-modal');if(modal)modal.remove();
     openPaymentModal(invId);
     renderInvoices();renderStats();
+  }catch(e){sync('err','Erro');alert(e.message);}
+}
+
+async function resetInvoicePayments(invId){
+  if(!confirm('Zerar TODOS os pagamentos desta invoice?\n\nEla voltará para status PENDENTE com pago=$0.\n\nIsso não pode ser desfeito.'))return;
+  var inv=invoices.find(function(i){return i.id===invId;});if(!inv)return;
+  inv.paid=0;
+  inv.payment_history=[];
+  inv.status='pending';
+  try{
+    sync('spin','Zerando...');
+    await sbU('invoices',invId,{paid:0,status:'pending',payment_history:[]});
+    sync('ok','Zerado!');
+    var modal=document.getElementById('pay-modal');if(modal)modal.remove();
+    renderInvoices();renderStats();
+    alert('✅ Pagamentos zerados! Agora você pode lançar os pagamentos corretamente.');
   }catch(e){sync('err','Erro');alert(e.message);}
 }
 
