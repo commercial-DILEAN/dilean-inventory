@@ -3407,162 +3407,132 @@ function openClientLedger(invIdOrClientName){
   if(!clientInvs.length){alert('Nenhuma invoice encontrada para '+clientName);return;}
 
   var now = new Date();
-
-  // Build flat list of events sorted by date (like bank statement)
   var events = [];
+  var payGroups = {};
 
   clientInvs.forEach(function(inv){
-    // Invoice = debit (charged)
-    events.push({
-      date: inv.date||'',
-      type: 'invoice',
-      desc: 'Invoice '+inv.num,
-      charged: inv.total,
-      paid: 0
-    });
+    // Invoice = debit line
+    events.push({date:inv.date||'',type:'invoice',desc:'Invoice '+inv.num,charged:inv.total,paid:0,_ts:''});
 
-    // Payments = credit
     var history = Array.isArray(inv.payment_history)?inv.payment_history:[];
-    if(history.length){
-      history.forEach(function(p){
-        events.push({
-          date: p.date||inv.date||'',
-          type: 'payment',
-          desc: 'Payment — '+inv.num+(p.note?' ('+p.note+')':''),
-          charged: 0,
-          paid: p.amount
-        });
-      });
-    } else if(inv.paid>0){
-      events.push({
-        date: inv.date||'',
-        type: 'payment',
-        desc: 'Payment — '+inv.num,
-        charged: 0,
-        paid: inv.paid
-      });
+
+    if(!history.length && inv.paid>0){
+      // Legacy: no history
+      var legKey = 'leg_'+inv.id;
+      payGroups[legKey] = {date:inv.date||'',desc:'Payment received',paid:inv.paid,_ts:inv.date||''};
+      return;
     }
+
+    history.forEach(function(p){
+      // Group key: batch_id (new) OR date+minute (old)
+      var groupKey;
+      if(p.batch_id){
+        groupKey = 'batch_'+p.batch_id;
+      } else if(p.registered){
+        // Same date + same minute = same session
+        groupKey = (p.date||'')+'_min_'+p.registered.slice(0,16);
+      } else {
+        // No timestamp = show individually
+        groupKey = 'solo_'+Math.random();
+      }
+
+      var desc = 'Payment received'+(p.note?' — '+p.note:'');
+      var ts = p.registered||p.date||'';
+
+      if(payGroups[groupKey]){
+        payGroups[groupKey].paid = +(payGroups[groupKey].paid + p.amount).toFixed(2);
+      } else {
+        payGroups[groupKey] = {date:p.date||inv.date||'', desc:desc, paid:p.amount, _ts:ts};
+      }
+    });
   });
 
-  // Sort by date ascending
+  // Add all payment groups as events
+  Object.values(payGroups).forEach(function(pg){
+    events.push({date:pg.date,type:'payment',desc:pg.desc,charged:0,paid:pg.paid,_ts:pg._ts});
+  });
+
+  // Sort: by date, invoices first, then by registration time
   events.sort(function(a,b){
-    if(!a.date&&!b.date)return 0;
-    if(!a.date)return 1;
-    if(!b.date)return -1;
-    return a.date.localeCompare(b.date);
+    if(a.date!==b.date) return (a.date||'').localeCompare(b.date||'');
+    if(a.type==='invoice'&&b.type==='payment') return -1;
+    if(a.type==='payment'&&b.type==='invoice') return 1;
+    return (a._ts||'').localeCompare(b._ts||'');
   });
 
-  // Running balance and totals
-  var runBal = 0;
-  var totalCharged = 0, totalPaid = 0;
-
-  var rows = events.map(function(e, i){
-    runBal += e.charged - e.paid;
+  var runBal=0, totalCharged=0, totalPaid=0;
+  var rows = events.map(function(e,i){
+    runBal = +(runBal + e.charged - e.paid).toFixed(2);
     totalCharged += e.charged;
     totalPaid += e.paid;
-
     var isInv = e.type==='invoice';
     var bg = i%2===0?'#fff':'#f9faf9';
-
-    // Format date
-    var dateFmt = '—';
-    if(e.date){
-      var dp = e.date.split('-');
-      if(dp.length===3) dateFmt = dp[1]+'/'+dp[2]+'/'+dp[0];
-    }
-
+    var dateFmt='—';
+    if(e.date){var dp=e.date.split('-');if(dp.length===3)dateFmt=dp[1]+'/'+dp[2]+'/'+dp[0];}
     return '<tr style="background:'+bg+'">'+
       '<td style="padding:7px 12px;font-size:11px;color:#555;white-space:nowrap">'+dateFmt+'</td>'+
       '<td style="padding:7px 12px;font-size:12px">'+
-        '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+(isInv?'#a32d2d':'#2a6049')+';margin-right:6px;vertical-align:middle"></span>'+
-        e.desc+
-      '</td>'+
-      '<td style="padding:7px 12px;text-align:right;font-size:12px;color:#a32d2d;font-weight:'+(isInv?'600':'400')+'">'+
+        '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+(isInv?'#a32d2d':'#2a6049')+';margin-right:7px;vertical-align:middle"></span>'+
+        e.desc+'</td>'+
+      '<td style="padding:7px 12px;text-align:right;font-size:12px;color:#a32d2d;font-weight:'+(isInv?'700':'400')+'">'+
         (e.charged>0?fmt(e.charged):'')+
       '</td>'+
-      '<td style="padding:7px 12px;text-align:right;font-size:12px;color:#2a6049;font-weight:'+(isInv?'400':'600')+'">'+
+      '<td style="padding:7px 12px;text-align:right;font-size:12px;color:#2a6049;font-weight:'+(isInv?'400':'700')+'">'+
         (e.paid>0?fmt(e.paid):'')+
       '</td>'+
-      '<td style="padding:7px 12px;text-align:right;font-size:13px;font-weight:700;color:'+(runBal>0.01?'#a32d2d':runBal<-0.01?'#2a6049':'#666')+'">'+
-        fmt(runBal)+
-      '</td>'+
+      '<td style="padding:7px 12px;text-align:right;font-size:13px;font-weight:700;color:'+(runBal>0.01?'#a32d2d':'#2a6049')+'">'+
+        fmt(Math.abs(runBal))+'</td>'+
       '</tr>';
   }).join('');
 
-  var balanceDue = totalCharged - totalPaid;
+  var balanceDue = +(totalCharged-totalPaid).toFixed(2);
 
-  var html =
-    '<div style="font-family:Arial,sans-serif;color:#000;padding:28px;max-width:780px">'+
-
-    // Header
+  var html='<div style="font-family:Arial,sans-serif;color:#000;padding:28px;max-width:780px">'+
     '<div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:14px;border-bottom:3px solid #1a5c3a;margin-bottom:18px">'+
-      '<div>'+
-        '<div style="font-size:20px;font-weight:700;color:#1a5c3a">DILEAN MARBLES CORP</div>'+
-        '<div style="font-size:11px;color:#666;margin-top:3px">1661 E Sample Rd, Pompano Beach FL 33064</div>'+
-        '<div style="font-size:11px;color:#666">Tel/Zelle: 346 455 8150</div>'+
-      '</div>'+
-      '<div style="text-align:right">'+
-        '<div style="font-size:18px;font-weight:700;color:#1a5c3a">ACCOUNT STATEMENT</div>'+
-        '<div style="font-size:11px;color:#666;margin-top:4px">'+clientName+'</div>'+
-        '<div style="font-size:11px;color:#666">Date: '+now.toLocaleDateString('en-US')+'</div>'+
-      '</div>'+
-    '</div>'+
-
-    // Summary cards
+      '<div><div style="font-size:20px;font-weight:700;color:#1a5c3a">DILEAN MARBLES CORP</div>'+
+      '<div style="font-size:11px;color:#666;margin-top:3px">1661 E Sample Rd, Pompano Beach FL 33064</div>'+
+      '<div style="font-size:11px;color:#666">Tel/Zelle: 346 455 8150</div></div>'+
+      '<div style="text-align:right"><div style="font-size:18px;font-weight:700;color:#1a5c3a">ACCOUNT STATEMENT</div>'+
+      '<div style="font-size:13px;color:#333;margin-top:4px;font-weight:500">'+clientName+'</div>'+
+      '<div style="font-size:11px;color:#666">Date: '+now.toLocaleDateString('en-US')+'</div></div></div>'+
     '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px">'+
       '<div style="background:#f0f7f3;border:1px solid #cde3d6;border-radius:6px;padding:12px;text-align:center">'+
-        '<div style="font-size:10px;font-weight:700;color:#2a6049;text-transform:uppercase;margin-bottom:4px">Total Invoiced</div>'+
-        '<div style="font-size:20px;font-weight:700;color:#1a5c3a">'+fmt(totalCharged)+'</div>'+
-        '<div style="font-size:11px;color:#666;margin-top:2px">'+clientInvs.length+' invoice(s)</div>'+
-      '</div>'+
+        '<div style="font-size:10px;font-weight:700;color:#2a6049;text-transform:uppercase;margin-bottom:5px">Total Invoiced</div>'+
+        '<div style="font-size:22px;font-weight:700;color:#1a5c3a">'+fmt(totalCharged)+'</div>'+
+        '<div style="font-size:11px;color:#666;margin-top:2px">'+clientInvs.length+' invoice(s)</div></div>'+
       '<div style="background:#f0f7f3;border:1px solid #97c459;border-radius:6px;padding:12px;text-align:center">'+
-        '<div style="font-size:10px;font-weight:700;color:#2a6049;text-transform:uppercase;margin-bottom:4px">Total Paid</div>'+
-        '<div style="font-size:20px;font-weight:700;color:#2a6049">'+fmt(totalPaid)+'</div>'+
-      '</div>'+
+        '<div style="font-size:10px;font-weight:700;color:#2a6049;text-transform:uppercase;margin-bottom:5px">Total Paid</div>'+
+        '<div style="font-size:22px;font-weight:700;color:#2a6049">'+fmt(totalPaid)+'</div></div>'+
       '<div style="background:'+(balanceDue>0.01?'#fff3f3':'#f0f7f3')+';border:2px solid '+(balanceDue>0.01?'#f09595':'#97c459')+';border-radius:6px;padding:12px;text-align:center">'+
-        '<div style="font-size:10px;font-weight:700;color:'+(balanceDue>0.01?'#a32d2d':'#2a6049')+';text-transform:uppercase;margin-bottom:4px">Balance Due</div>'+
-        '<div style="font-size:22px;font-weight:700;color:'+(balanceDue>0.01?'#a32d2d':'#2a6049')+'">'+fmt(balanceDue)+'</div>'+
-      '</div>'+
+        '<div style="font-size:10px;font-weight:700;color:'+(balanceDue>0.01?'#a32d2d':'#2a6049')+';text-transform:uppercase;margin-bottom:5px">Balance Due</div>'+
+        '<div style="font-size:22px;font-weight:700;color:'+(balanceDue>0.01?'#a32d2d':'#2a6049')+'">'+fmt(balanceDue)+'</div></div>'+
     '</div>'+
-
-    // Ledger table
     '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:20px">'+
-      '<thead>'+
-        '<tr style="background:#1a5c3a;color:#fff">'+
-          '<th style="padding:8px 12px;text-align:left;width:90px">Date</th>'+
-          '<th style="padding:8px 12px;text-align:left">Description</th>'+
-          '<th style="padding:8px 12px;text-align:right;width:110px">Charged</th>'+
-          '<th style="padding:8px 12px;text-align:right;width:110px">Paid</th>'+
-          '<th style="padding:8px 12px;text-align:right;width:110px">Balance</th>'+
-        '</tr>'+
-      '</thead>'+
-      '<tbody>'+
-        rows+
+      '<thead><tr style="background:#1a5c3a;color:#fff">'+
+        '<th style="padding:8px 12px;text-align:left;width:90px">Date</th>'+
+        '<th style="padding:8px 12px;text-align:left">Description</th>'+
+        '<th style="padding:8px 12px;text-align:right;width:110px">Charged</th>'+
+        '<th style="padding:8px 12px;text-align:right;width:110px">Paid</th>'+
+        '<th style="padding:8px 12px;text-align:right;width:110px">Balance</th>'+
+      '</tr></thead>'+
+      '<tbody>'+rows+
         '<tr style="background:#1a5c3a;color:#fff;font-weight:700">'+
           '<td colspan="2" style="padding:8px 12px">TOTAL</td>'+
           '<td style="padding:8px 12px;text-align:right">'+fmt(totalCharged)+'</td>'+
           '<td style="padding:8px 12px;text-align:right">'+fmt(totalPaid)+'</td>'+
           '<td style="padding:8px 12px;text-align:right">'+fmt(balanceDue)+'</td>'+
         '</tr>'+
-      '</tbody>'+
-    '</table>'+
-
-    // Payment info
+      '</tbody></table>'+
     '<div style="background:#f8faf8;border:1px solid #cde3d6;border-radius:6px;padding:12px 14px;font-size:11px;margin-bottom:14px">'+
       '<div style="font-weight:700;color:#1a5c3a;margin-bottom:6px">Payment Information</div>'+
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;line-height:1.8">'+
-        '<span><strong>Bank:</strong> Bank Of America, N.A.</span>'+
-        '<span><strong>Account:</strong> 8981 6729 0208</span>'+
-        '<span><strong>Wire/Routing:</strong> 063100277</span>'+
-        '<span><strong>SWIFT:</strong> BOFAUS6S</span>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;line-height:1.9">'+
+        '<span><strong>Bank:</strong> Bank Of America, N.A.</span><span><strong>Account:</strong> 8981 6729 0208</span>'+
+        '<span><strong>Wire/Routing:</strong> 063100277</span><span><strong>SWIFT:</strong> BOFAUS6S</span>'+
         '<span><strong>Zelle:</strong> 346 455 8150</span>'+
-      '</div>'+
-    '</div>'+
-
+      '</div></div>'+
     '<div style="text-align:center;font-size:10px;color:#999;border-top:1px solid #e0e0e0;padding-top:8px">'+
       'DILEAN MARBLES CORP — Account Statement — '+clientName+' — '+now.toLocaleDateString('en-US')+
-    '</div>'+
-    '</div>';
+    '</div></div>';
 
   document.getElementById('print-area').innerHTML = html;
   window.print();
@@ -4060,13 +4030,14 @@ async function saveClientPayment(){
   sync('spin','Salvando pagamentos...');
 
   try{
+    var batchId = uid(); // same batch_id for all payments in this session
     for(var i=0;i<toSave.length;i++){
       var item = toSave[i];
       var inv = invoices.find(function(x){return x.id===item.invId;});
       if(!inv)continue;
 
       var history = Array.isArray(inv.payment_history)?inv.payment_history:[];
-      history.push({amount:item.amount, date:date, note:note, registered:new Date().toISOString()});
+      history.push({amount:item.amount, date:date, note:note, registered:new Date().toISOString(), batch_id:batchId});
 
       var newPaid = +(inv.paid + item.amount).toFixed(2);
       if(newPaid > inv.total) newPaid = inv.total;
