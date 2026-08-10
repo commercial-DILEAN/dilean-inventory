@@ -3762,34 +3762,48 @@ function rebuildContainerSel(){
 }
 
 function getContainerStats(c){
-  var contSlabs=slabs.filter(function(s){return s.container_id===c.id;});
-  var totalSlabs=contSlabs.length;
-  var soldSlabs=contSlabs.filter(function(s){return s.status==='sold';});
-  var availSlabs=contSlabs.filter(function(s){return s.status==='available';});
-  var consSlabs=contSlabs.filter(function(s){return s.status==='consigned';});
+  var contSlabs = slabs.filter(function(s){return s.container_id===c.id;});
+  var totalSlabs = contSlabs.length;
+  var soldSlabs  = contSlabs.filter(function(s){return s.status==='sold';});
+  var availSlabs = contSlabs.filter(function(s){return s.status==='available';});
+  var consSlabs  = contSlabs.filter(function(s){return s.status==='consigned';});
+  var notSold    = contSlabs.filter(function(s){return s.status!=='sold';});
 
-  // Revenue from sold slabs
-  var revenue=soldSlabs.reduce(function(a,s){
-    var sf=(s.width&&s.height)?+((s.width*s.height)/144):0;
-    return a+(sf*(s.price_per_sqft||0));
-  },0);
+  // Use sv() which already handles sqft * price_per_sqft correctly
+  var totalSqft  = contSlabs.reduce(function(a,s){return a+sqft(s);},0);
+  var soldSqft   = soldSlabs.reduce(function(a,s){return a+sqft(s);},0);
+  var remainSqft = notSold.reduce(function(a,s){return a+sqft(s);},0);
 
-  // Projected revenue (all slabs at their price)
-  var projRevenue=contSlabs.reduce(function(a,s){
-    var sf=(s.width&&s.height)?+((s.width*s.height)/144):0;
-    return a+(sf*(s.price_per_sqft||0));
-  },0);
+  // Revenue from sold slabs (using sv = sqft * price_per_sqft)
+  var revenue = soldSlabs.reduce(function(a,s){return a+sv(s);},0);
 
-  var totalCost=c.totalCost||0;
-  var recovered=totalCost>0?Math.min(100,(revenue/totalCost*100)):0;
-  var netProfit=revenue-totalCost;
-  var projProfit=projRevenue-totalCost;
-  var margin=projRevenue>0?(projProfit/projRevenue*100):0;
+  // Projected revenue from ALL slabs at listed prices (sold + remaining)
+  var projRevenue = contSlabs.reduce(function(a,s){return a+sv(s);},0);
+
+  // Projected revenue from remaining only
+  var projRemain = notSold.reduce(function(a,s){return a+sv(s);},0);
+
+  var totalCost  = c.totalCost||0;
+  var stillNeed  = Math.max(0, totalCost - revenue);
+  var recovered  = totalCost>0 ? Math.min(100,(revenue/totalCost*100)) : 0;
+  var currentProfit = revenue - totalCost;
+  // Projected profit = total revenue from ALL slabs at listed prices - container cost
+  var projProfit = projRevenue - totalCost;
+  var projMargin = projRevenue>0 ? (projProfit/projRevenue*100) : 0;
+  var breakEvenPriceRemain = (remainSqft>0&&stillNeed>0) ? (stillNeed/remainSqft) : 0;
 
   return{
-    totalSlabs:totalSlabs,sold:soldSlabs.length,avail:availSlabs.length,cons:consSlabs.length,
-    revenue:revenue,projRevenue:projRevenue,
-    recovered:recovered,netProfit:netProfit,projProfit:projProfit,margin:margin,
+    totalSlabs:totalSlabs, sold:soldSlabs.length, avail:availSlabs.length, cons:consSlabs.length,
+    totalSqft:+totalSqft.toFixed(1), soldSqft:+soldSqft.toFixed(1), remainSqft:+remainSqft.toFixed(1),
+    revenue:+revenue.toFixed(2),
+    projRemain:+projRemain.toFixed(2),
+    projRevenue:+projRevenue.toFixed(2),
+    stillNeed:+stillNeed.toFixed(2),
+    recovered:+recovered.toFixed(1),
+    currentProfit:+currentProfit.toFixed(2),
+    projProfit:+projProfit.toFixed(2),
+    projMargin:+projMargin.toFixed(1),
+    breakEvenPriceRemain:+breakEvenPriceRemain.toFixed(2),
     allSold:totalSlabs>0&&soldSlabs.length===totalSlabs
   };
 }
@@ -3836,29 +3850,74 @@ function renderContainers(){
       '</div>'+
       '<div style="display:flex;gap:8px;align-items:center">'+
       '<span style="padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;background:'+(s.allSold?'#eaf3de':s.recovered>=100?'#eaf3de':'var(--b2)')+';color:'+statusColor+'">'+statusLabel+'</span>'+
+      '<button class="btn sm p" onclick="openLinkSlabsModal(this.dataset.id)" data-id="'+c.id+'">🔗 Vincular chapas</button>'+
       '<button class="btn sm" onclick="openContainerModal(this.dataset.id)" data-id="'+c.id+'">✏ Editar</button>'+
       '<button class="btn sm dn" onclick="deleteContainer(this.dataset.id)" data-id="'+c.id+'">Excluir</button>'+
       '</div></div>'+
 
-      // Main stats grid
-      '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:14px">'+
-      '<div style="background:var(--b2);border-radius:var(--r);padding:10px;text-align:center">'+
-      '<div style="font-size:10px;color:var(--t2);text-transform:uppercase;font-weight:600;margin-bottom:4px">Custo total</div>'+
-      '<div style="font-size:18px;font-weight:700;color:var(--d)">'+fmt(c.totalCost)+'</div>'+
+      // ── Main KPI cards ──────────────────────────────
+      '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">'+
+
+      // Custo total
+      '<div style="background:var(--b2);border:1px solid var(--br1);border-radius:var(--r);padding:12px;text-align:center">'+
+        '<div style="font-size:10px;color:var(--t2);text-transform:uppercase;font-weight:600;margin-bottom:4px">💼 Custo total</div>'+
+        '<div style="font-size:20px;font-weight:700;color:var(--d)">'+fmt(c.totalCost)+'</div>'+
+        '<div style="font-size:10px;color:var(--t2);margin-top:3px">'+s.totalSqft+' sqft total</div>'+
       '</div>'+
-      '<div style="background:var(--b2);border-radius:var(--r);padding:10px;text-align:center">'+
-      '<div style="font-size:10px;color:var(--t2);text-transform:uppercase;font-weight:600;margin-bottom:4px">Receita atual</div>'+
-      '<div style="font-size:18px;font-weight:700;color:#2a6049">'+fmt(s.revenue)+'</div>'+
+
+      // Receita atual (vendas já realizadas)
+      '<div style="background:var(--b2);border:1px solid #97c459;border-radius:var(--r);padding:12px;text-align:center">'+
+        '<div style="font-size:10px;color:#2a6049;text-transform:uppercase;font-weight:600;margin-bottom:4px">✅ Receita atual</div>'+
+        '<div style="font-size:20px;font-weight:700;color:#2a6049">'+fmt(s.revenue)+'</div>'+
+        '<div style="font-size:10px;color:var(--t2);margin-top:3px">'+s.sold+' chapas vendidas ('+s.soldSqft+' sqft)</div>'+
       '</div>'+
-      '<div style="background:'+(s.netProfit>=0?'#eaf3de':'#fff5f5')+';border-radius:var(--r);padding:10px;text-align:center">'+
-      '<div style="font-size:10px;color:var(--t2);text-transform:uppercase;font-weight:600;margin-bottom:4px">'+(s.allSold?'Lucro líquido':'Lucro projetado')+'</div>'+
-      '<div style="font-size:18px;font-weight:700;color:'+(s.projProfit>=0?'#2a6049':'#a32d2d')+'">'+fmt(s.projProfit)+'</div>'+
+
+      // Lucro/prejuízo atual
+      '<div style="background:'+(s.currentProfit>=0?'#eaf3de':'#fff5f5')+';border:1px solid '+(s.currentProfit>=0?'#97c459':'#f09595')+';border-radius:var(--r);padding:12px;text-align:center">'+
+        '<div style="font-size:10px;color:'+(s.currentProfit>=0?'#2a6049':'#a32d2d')+';text-transform:uppercase;font-weight:600;margin-bottom:4px">'+(s.currentProfit>=0?'💰 Lucro atual':'📉 Saldo atual')+'</div>'+
+        '<div style="font-size:20px;font-weight:700;color:'+(s.currentProfit>=0?'#2a6049':'#a32d2d')+'">'+fmt(s.currentProfit)+'</div>'+
+        '<div style="font-size:10px;color:var(--t2);margin-top:3px">'+(s.currentProfit<0?'Falta '+fmt(s.stillNeed)+' p/ quitar':'Custo recuperado!')+'</div>'+
       '</div>'+
-      '<div style="background:var(--b2);border-radius:var(--r);padding:10px;text-align:center">'+
-      '<div style="font-size:10px;color:var(--t2);text-transform:uppercase;font-weight:600;margin-bottom:4px">Chapas</div>'+
-      '<div style="font-size:16px;font-weight:700">'+s.sold+'/'+s.totalSlabs+'</div>'+
-      '<div style="font-size:10px;color:var(--t2)">vendidas</div>'+
+
+      // Lucro projetado
+      '<div style="background:'+(s.projProfit>=0?'#f0f7f3':'#fff5f5')+';border:2px solid '+(s.projProfit>=0?'#1a5c3a':'#f09595')+';border-radius:var(--r);padding:12px;text-align:center">'+
+        '<div style="font-size:10px;color:'+(s.projProfit>=0?'#1a5c3a':'#a32d2d')+';text-transform:uppercase;font-weight:600;margin-bottom:4px">🎯 Lucro projetado</div>'+
+        '<div style="font-size:20px;font-weight:700;color:'+(s.projProfit>=0?'#1a5c3a':'#a32d2d')+'">'+fmt(s.projProfit)+'</div>'+
+        '<div style="font-size:10px;color:var(--t2);margin-top:3px">Margem: '+s.projMargin+'%</div>'+
       '</div>'+
+      '</div>'+
+
+      // ── Projection detail ─────────────────────────
+      '<div style="background:var(--b2);border:.5px solid var(--br1);border-radius:var(--r);padding:12px 14px;margin-bottom:14px;font-size:12px">'+
+        '<div style="font-weight:600;margin-bottom:8px;color:var(--t1)">📊 Projeção detalhada (preços atuais cadastrados)</div>'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">'+
+
+          '<div>'+
+            '<div style="color:var(--t2);font-size:11px;margin-bottom:3px">Chapas restantes</div>'+
+            '<div style="font-weight:600">'+(s.totalSlabs-s.sold)+' chapas ('+s.remainSqft+' sqft)</div>'+
+            '<div style="color:var(--t2);font-size:11px;margin-top:6px;margin-bottom:3px">Receita esperada restante</div>'+
+            '<div style="font-weight:600;color:#2a6049">'+fmt(s.projRemain)+'</div>'+
+          '</div>'+
+
+          '<div>'+
+            '<div style="color:var(--t2);font-size:11px;margin-bottom:3px">Receita total esperada</div>'+
+            '<div style="font-weight:600">'+fmt(s.projRevenue)+'</div>'+
+            '<div style="color:var(--t2);font-size:11px;margin-top:6px;margin-bottom:3px">Custo do container</div>'+
+            '<div style="font-weight:600;color:var(--d)">'+fmt(c.totalCost)+'</div>'+
+          '</div>'+
+
+          '<div style="border-left:.5px solid var(--br1);padding-left:12px">'+
+            (s.stillNeed>0?
+              '<div style="color:var(--t2);font-size:11px;margin-bottom:3px">Preço mínimo p/ quitar</div>'+
+              '<div style="font-weight:600;color:#854f0b">$'+s.breakEvenPriceRemain+'/sqft</div>'+
+              '<div style="font-size:10px;color:var(--t2);margin-top:2px">nas chapas restantes</div>'
+              :
+              '<div style="color:#2a6049;font-weight:600">✅ Custo já recuperado!</div>'
+            )+
+            '<div style="color:var(--t2);font-size:11px;margin-top:8px;margin-bottom:3px">Lucro projetado final</div>'+
+            '<div style="font-size:16px;font-weight:700;color:'+(s.projProfit>=0?'#1a5c3a':'#a32d2d')+'">'+fmt(s.projProfit)+' ('+s.projMargin+'%)</div>'+
+          '</div>'+
+        '</div>'+
       '</div>'+
 
       // Progress bar
@@ -4125,6 +4184,181 @@ async function resetInvoicePayments(invId){
     renderInvoices();renderStats();
     alert('✅ Pagamentos zerados! Agora você pode lançar os pagamentos corretamente.');
   }catch(e){sync('err','Erro');alert(e.message);}
+}
+
+function openLinkSlabsModal(contId){
+  var c = containers.find(function(x){return x.id===contId;});
+  if(!c)return;
+
+  var existing = document.getElementById('link-slabs-modal');
+  if(existing) existing.remove();
+
+  // Get all lots and materials
+  var lots = [...new Set(slabs.map(function(s){return s.lot;}))].sort();
+  var materials = [...new Set(slabs.map(function(s){return s.material;}))].sort();
+
+  // Already linked to this container
+  var linked = slabs.filter(function(s){return s.container_id===contId;});
+
+  var div = document.createElement('div');
+  div.id = 'link-slabs-modal';
+  div.className = 'mb';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:300';
+
+  var lotOpts = lots.map(function(l){return'<option value="'+l+'">Lote '+l+'</option>';}).join('');
+  var matOpts = materials.map(function(m){return'<option value="'+m+'">'+m+'</option>';}).join('');
+
+  div.innerHTML = '<div class="mo" style="width:min(600px,96vw);max-height:90vh;overflow-y:auto">'+
+    '<h3>🔗 Vincular chapas ao container: '+c.name+'</h3>'+
+    '<div style="background:var(--b2);border-radius:var(--r);padding:10px 14px;margin-bottom:14px;font-size:12px">'+
+      'Já vinculadas: <strong>'+linked.length+' chapas</strong>'+
+    '</div>'+
+
+    '<div class="sec">Filtrar chapas para vincular</div>'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">'+
+      '<select id="link-lot" style="flex:1;min-width:140px;padding:7px 10px;border:.5px solid var(--br1);border-radius:var(--r);font-size:12px;background:var(--b1);color:var(--t1)">'+
+        '<option value="">— Todos os lotes —</option>'+lotOpts+
+      '</select>'+
+      '<select id="link-mat" style="flex:1;min-width:140px;padding:7px 10px;border:.5px solid var(--br1);border-radius:var(--r);font-size:12px;background:var(--b1);color:var(--t1)">'+
+        '<option value="">— Todos os materiais —</option>'+matOpts+
+      '</select>'+
+      '<button class="btn sm" onclick="filterLinkSlabs()">Filtrar</button>'+
+    '</div>'+
+    '<div id="link-slabs-list" style="max-height:300px;overflow-y:auto;border:.5px solid var(--br1);border-radius:var(--r);margin-bottom:10px"></div>'+
+    '<div id="link-count" style="font-size:12px;color:var(--t2);margin-bottom:12px"></div>'+
+    '<div class="ma">'+
+      '<button class="btn" onclick="document.getElementById(&quot;link-slabs-modal&quot;).remove()">Cancelar</button>'+
+      '<button class="btn p" onclick="saveLinkSlabs(&quot;'+contId+'&quot;)">✅ Salvar vínculos</button>'+
+    '</div></div>';
+
+  document.body.appendChild(div);
+  div.addEventListener('click',function(e){if(e.target===div)div.remove();});
+  filterLinkSlabs(contId);
+  window._linkContId = contId;
+}
+
+function filterLinkSlabs(contId){
+  var cid = contId || window._linkContId;
+  var lot = document.getElementById('link-lot')?document.getElementById('link-lot').value:'';
+  var mat = document.getElementById('link-mat')?document.getElementById('link-mat').value:'';
+
+  var filtered = slabs.filter(function(s){
+    return (!lot||s.lot===lot) && (!mat||s.material===mat);
+  });
+
+  var el = document.getElementById('link-slabs-list');
+  if(!el)return;
+
+  if(!filtered.length){
+    el.innerHTML='<div style="padding:16px;text-align:center;color:var(--t2);font-size:12px">Nenhuma chapa encontrada</div>';
+    return;
+  }
+
+  // Group by lot + material
+  var groups = {};
+  filtered.forEach(function(s){
+    var key = s.lot+'||'+s.material;
+    if(!groups[key])groups[key]={lot:s.lot,material:s.material,slabs:[]};
+    groups[key].slabs.push(s);
+  });
+
+  el.innerHTML = Object.values(groups).map(function(g){
+    var allLinked = g.slabs.every(function(s){return s.container_id===cid;});
+    var someLinked = g.slabs.some(function(s){return s.container_id===cid;});
+    return '<div style="border-bottom:.5px solid var(--br1);padding:10px 12px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center">'+
+        '<div>'+
+          '<strong style="font-size:13px">Lote '+g.lot+' — '+g.material+'</strong>'+
+          '<span style="margin-left:8px;font-size:11px;color:var(--t2)">'+g.slabs.length+' chapas</span>'+
+          (someLinked?'<span style="margin-left:6px;font-size:10px;background:#eaf3de;color:#2a6049;padding:1px 6px;border-radius:10px">'+(allLinked?'Todas vinculadas':'Parcialmente vinculado')+'</span>':'')+
+        '</div>'+
+        '<div style="display:flex;gap:6px">'+
+          '<button class="btn sm p" onclick="selectGroup(this.dataset.lot,this.dataset.mat,true)" data-lot="'+g.lot+'" data-mat="'+g.material+'">+ Selecionar todos</button>'+
+          '<button class="btn sm" onclick="selectGroup(this.dataset.lot,this.dataset.mat,false)" data-lot="'+g.lot+'" data-mat="'+g.material+'">− Remover todos</button>'+
+        '</div>'+
+      '</div>'+
+      '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:8px">'+
+        g.slabs.map(function(s){
+          var isSel = s.container_id===cid || (window._linkSel&&window._linkSel[s.id]);
+          var isOther = s.container_id && s.container_id!==cid;
+          return '<span id="lnk-'+s.id+'" onclick="toggleLinkSlab(this.dataset.id)" data-id="'+s.id+'" '+
+            'style="padding:3px 8px;border-radius:4px;font-size:11px;cursor:pointer;'+
+            'background:'+(isSel?'#2a6049':isOther?'#faeeda':'var(--b3)')+';'+
+            'color:'+(isSel?'#fff':isOther?'#854f0b':'var(--t1)')+'">'+
+            '#'+s.num+(isOther?' (outro)':'')+
+          '</span>';
+        }).join('')+
+      '</div></div>';
+  }).join('');
+
+  updateLinkCount();
+}
+
+function toggleLinkSlab(slabId){
+  if(!window._linkSel) window._linkSel = {};
+  var cid = window._linkContId;
+  var s = slabs.find(function(x){return x.id===slabId;});
+  if(!s)return;
+
+  if(s.container_id===cid){
+    // Currently linked — mark for removal
+    s.container_id = null;
+    window._linkSel[slabId] = false;
+  } else {
+    // Not linked — mark for linking
+    s.container_id = cid;
+    window._linkSel[slabId] = true;
+  }
+  filterLinkSlabs(cid);
+}
+
+function selectGroup(lot, mat, add){
+  var cid = window._linkContId;
+  if(!window._linkSel) window._linkSel = {};
+  slabs.filter(function(s){return s.lot===lot&&s.material===mat;}).forEach(function(s){
+    if(add){s.container_id=cid;window._linkSel[s.id]=true;}
+    else{if(s.container_id===cid){s.container_id=null;window._linkSel[s.id]=false;}}
+  });
+  filterLinkSlabs(cid);
+}
+
+function updateLinkCount(){
+  var cid = window._linkContId;
+  var count = slabs.filter(function(s){return s.container_id===cid;}).length;
+  var el = document.getElementById('link-count');
+  if(el) el.textContent = count+' chapa(s) selecionada(s) para este container';
+}
+
+async function saveLinkSlabs(contId){
+  var toUpdate = slabs.filter(function(s){
+    return window._linkSel&&window._linkSel[s.id]!==undefined;
+  });
+
+  if(!toUpdate.length){
+    // Still save the ones already linked
+    var linked = slabs.filter(function(s){return s.container_id===contId;});
+    toUpdate = linked;
+  }
+
+  sync('spin','Salvando vínculos...');
+  var count = 0;
+  try{
+    for(var i=0;i<slabs.length;i++){
+      var s = slabs[i];
+      if(window._linkSel&&window._linkSel[s.id]!==undefined){
+        await sbU('slabs',s.id,{container_id:s.container_id||null});
+        count++;
+      }
+    }
+    sync('ok','Vínculos salvos!');
+    window._linkSel = {};
+    document.getElementById('link-slabs-modal').remove();
+    renderContainers();
+    alert('✅ '+count+' chapa(s) atualizada(s) com sucesso!');
+  }catch(e){
+    sync('err','Erro');
+    alert('Erro: '+e.message);
+  }
 }
 
 function closeM(id){document.getElementById(id).classList.add('hidden');}
