@@ -3948,7 +3948,7 @@ function renderContainers(){
       '<div style="display:flex;justify-content:space-between"><span>⇄ Consignadas</span><span style="color:var(--i)">'+s.cons+'</span></div>'+
       '<div style="display:flex;justify-content:space-between"><span>✗ Vendidas</span><span style="color:var(--d)">'+s.sold+'</span></div>'+
       '<div style="display:flex;justify-content:space-between;border-top:.5px solid var(--br1);padding-top:4px;font-weight:600"><span>Total</span><span>'+s.totalSlabs+'</span></div>'+
-      (s.totalSlabs>0?'<div style="display:flex;justify-content:space-between"><span>Margem projetada</span><span style="color:'+(s.margin>=0?'#2a6049':'#a32d2d')+'">'+s.margin.toFixed(1)+'%</span></div>':'')+
+      (s.totalSlabs>0?'<div style="display:flex;justify-content:space-between"><span>Margem projetada</span><span style="color:'+(s.projMargin>=0?'#2a6049':'#a32d2d')+'">'+s.projMargin+'%</span></div>':'')+
       '</div>'+
       '</div></div>'+
 
