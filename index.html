@@ -1355,7 +1355,7 @@ function renderVis(){
   }).join('');
   var sv2=document.getElementById('sv');
   if(!selLoc){sv2.innerHTML='<div class="empty">Selecione um local acima.</div>';return;}
-  var ls=slabs.filter(function(s){return s.location===selLoc;});
+  var ls=slabs.filter(function(s){return s.location===selLoc||(s.sold_to===selLoc&&s.status==='sold');});
   if(!ls.length){sv2.innerHTML='<div class="empty">Nenhuma chapa neste local.</div>';return;}
   var lots=[...new Set(ls.map(function(s){return s.lot;}))];
   sv2.innerHTML=lots.map(function(lot){
@@ -1497,9 +1497,31 @@ async function savePayment(invId){
 }
 
 async function delInv(id){
-  if(!confirm('Excluir esta invoice?'))return;
-  try{sync('spin','...');await sbD('invoices',id);invoices=invoices.filter(function(i){return i.id!==id;});sync('ok','Salvo');renderInvoices();renderStats();}
-  catch(e){sync('err','Erro');alert(e.message);}
+  var inv=invoices.find(function(i){return i.id===id;});
+  if(!inv)return;
+  if(!confirm('Excluir invoice '+inv.num+'?\n\nAs chapas serão revertidas para Disponível ou Consignada automaticamente.'))return;
+  try{
+    sync('spin','Revertendo chapas...');
+    var clientNames=clients.map(function(c){return c.name;});
+    var slabIds=inv.slab_ids||[];
+    for(var i=0;i<slabIds.length;i++){
+      var s=slabs.find(function(x){return x.id===slabIds[i];});
+      if(!s)continue;
+      var onOther=invoices.some(function(oi){return oi.id!==id&&(oi.slab_ids||[]).indexOf(s.id)!==-1;});
+      if(onOther)continue;
+      // Revert: if location matches a client → consigned, else → available
+      // Keep location as is (slab stays where it physically was)
+      var newStatus=clientNames.indexOf(s.location)!==-1?'consigned':'available';
+      s.status=newStatus;
+      s.sold_to=null;
+      await sbU('slabs',s.id,{status:newStatus,sold_to:null});
+    }
+    await sbD('invoices',id);
+    invoices=invoices.filter(function(i){return i.id!==id;});
+    sync('ok','Excluída');
+    renderInvoices();renderStats();renderTable();
+    alert('✅ Invoice '+inv.num+' excluída.\n'+slabIds.length+' chapa(s) revertidas.');
+  }catch(e){sync('err','Erro');alert(e.message);}
 }
 
 // ── INVOICE MODAL (criar + editar) ────────────────────
@@ -1614,7 +1636,16 @@ async function saveInv(){
       invoices.push(inv);
     }
     // dar baixa automática assim que faturar — chapa saiu independente do pagamento
-    for(var i=0;i<selIds.length;i++){var s=slabs.find(function(x){return x.id===selIds[i];});if(s&&s.status!=='sold'){s.status='sold';s.sold_to=client;await sbU('slabs',s.id,{status:'sold',sold_to:client});}}
+    for(var i=0;i<selIds.length;i++){
+      var s=slabs.find(function(x){return x.id===selIds[i];});
+      if(!s)continue;
+      // Sempre atualiza status, sold_to E location para o cliente da invoice
+      // Assim tudo fica consistente: onde está, vendido para quem, e status
+      s.status='sold';
+      s.sold_to=client;
+      s.location=client;
+      await sbU('slabs',s.id,{status:'sold',sold_to:client,location:client});
+    }
     sync('ok','Salvo');closeM('ivm');rebuildSels();renderInvoices();renderStats();renderTable();
   }catch(e){sync('err','Erro');alert(e.message);}
 }
