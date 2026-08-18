@@ -68,7 +68,7 @@ table tr:hover td{background:var(--b2);}
 .pa img{max-width:100%;max-height:160px;border-radius:6px;object-fit:cover;}
 .cr{display:flex;flex-wrap:wrap;gap:5px;}
 .ch{padding:3px 9px;border-radius:20px;font-size:11px;background:var(--b2);border:.5px solid var(--br1);cursor:pointer;user-select:none;}
-.ch.sel{background:var(--a);color:#fff;border-color:var(--a);}
+.ch.warn{background:#faeeda;border:.5px solid #f5a623;color:#854f0b}.ch.sel{background:var(--a);color:#fff;border-color:var(--a);}
 .ic{border:.5px solid var(--br1);border-radius:var(--r);padding:12px;margin-bottom:8px;}
 .pb{height:4px;background:var(--b3);border-radius:2px;margin-top:6px;overflow:hidden;}
 .pf{height:100%;border-radius:2px;background:var(--a);}
@@ -357,8 +357,11 @@ table tr:hover td{background:var(--b2);}
           <div style="font-size:15px;font-weight:500">Material Transfer Sheet</div>
           <div style="font-size:12px;color:var(--t2)">Gere o documento de transferência de material para consignação</div>
         </div>
-        <button class="btn p" onclick="printTransfer()">🖨 Gerar Transfer Sheet</button>
+        <button class="btn p" onclick="printTransfer()">🖨 Novo Transfer</button>
       </div>
+      <div class="sec">Transfers gerados</div>
+      <div id="transfers-list" style="margin-bottom:20px"></div>
+      <div class="sec">Novo Transfer Sheet</div>
 
       <div class="fg" style="margin-bottom:16px;max-width:700px">
         <div class="fi"><label>De (From)</label><input id="tr-from-name" placeholder="DILEAN MARBLES"></div>
@@ -862,7 +865,7 @@ async function sbU(t,id,d){
 async function sbD(t,id){var r=await fetch(SB+'/rest/v1/'+t+'?id=eq.'+id,{method:'DELETE',headers:H});if(!r.ok)throw new Error(await r.text());}
 async function sbUpsert(t,d){var r=await fetch(SB+'/rest/v1/'+t,{method:'POST',headers:Object.assign({},H,{'Prefer':'resolution=merge-duplicates'}),body:JSON.stringify(d)});if(!r.ok)throw new Error(await r.text());return r.json();}
 
-var slabs=[],invoices=[],clients=[],bills=[],fixedExps=[],generalExps=[],containers=[],finBalance=0,finBalanceDate='',locs=['Meta Surface','ZTX Surfaces','Pacific Shore','Hope Solutions','Escritório'];
+var slabs=[],invoices=[],transfers=[],clients=[],bills=[],fixedExps=[],generalExps=[],containers=[],finBalance=0,finBalanceDate='',locs=['Meta Surface','ZTX Surfaces','Pacific Shore','Hope Solutions','Escritório'];
 var editId=null,editInvId=null,editClientId=null,selLoc=null,selIds=[],curPhoto=null,eic=0;
 var cfg={name:'DILEAN MARBLES CORP',addr:'1661 E Sample Rd, Pompano Beach FL 33064',phone:'346 455 8150',email:'',bank:'Bank Of America, N.A.',acct:'8981 6729 0208',wire:'063100277',swift:'BOFAUS6S',zelle:'346 455 8150',bankAddr:'555 California St., San Francisco, CA 94104'};
 
@@ -912,11 +915,12 @@ async function init(){
   try{
     var r=await fetch(SB+'/rest/v1/slabs?limit=1',{headers:H});
     if(r.status===404||r.status===400||r.status===401){showSetup();return;}
-    var [sd,id,set]=await Promise.all([
+    var [sd,id,td,set]=await Promise.all([
       sbGNoPhoto('slabs'),sbG('invoices'),
+      sbG('transfers'),
       fetch(SB+'/rest/v1/settings',{headers:H}).then(function(r){return r.json();})
     ]);
-    slabs=sd||[];invoices=id||[];
+    slabs=sd||[];invoices=id||[];transfers=td||[];
     if(set&&Array.isArray(set)){
       set.forEach(function(s){
         if(s.key==='locations'&&s.value)locs=s.value;
@@ -1580,7 +1584,7 @@ function renderChips(){
   var ls=document.getElementById('ils').value.trim().toLowerCase(),ns=document.getElementById('ins').value.trim().toLowerCase();
   var pool=slabs.filter(function(s){return s.status!=='sold'||selIds.includes(s.id);});
   var f=pool.filter(function(s){return(!ls||s.lot.includes(ls))&&(!ns||s.num.includes(ns));}).slice(0,40);
-  document.getElementById('ich').innerHTML=f.map(function(s){var sf=sqft(s);return'<span class="ch '+(selIds.includes(s.id)?'sel':'')+'" onclick="togC(\''+s.id+'\')">L'+s.lot+' #'+s.num+' '+s.material.split(' ')[0]+(sf?' ('+sf.toFixed(1)+'sf)':'')+'</span>';}).join('');
+  document.getElementById('ich').innerHTML=f.map(function(s){var sf=sqft(s);var inOther=!selIds.includes(s.id)&&invoices.some(function(i){return i.id!==editInvId&&(i.slab_ids||[]).indexOf(s.id)!==-1;});return'<span class="ch '+(selIds.includes(s.id)?'sel':inOther?'warn':'')+' " onclick="togC(this.dataset.id)" data-id="'+s.id+'" title="'+(inOther?'Já em outra invoice!':'')+'">L'+s.lot+' #'+s.num+' '+s.material.split(' ')[0]+(sf?' ('+sf.toFixed(1)+'sf)':'')+'</span>';}).join('');
   var sel=selIds.map(function(id){return slabs.find(function(s){return s.id===id;});}).filter(Boolean);
   var tot=sel.reduce(function(a,s){return a+sv(s);},0);
   document.getElementById('isi').textContent=sel.length?sel.length+' chapa(s) selecionada(s) · Total chapas: '+fmt(tot):'';
@@ -1612,6 +1616,21 @@ function getEIs(){var items=[];for(var i=1;i<=eic;i++){var d=document.getElement
 async function saveInv(){
   var num=document.getElementById('inum').value.trim(),client=document.getElementById('icli').value.trim();
   if(!num||!client){alert('Número e cliente são obrigatórios.');return;}
+
+  // ── Verificar se alguma chapa já está em OUTRA invoice ──
+  var conflicts=[];
+  selIds.forEach(function(sid){
+    var otherInv=invoices.find(function(i){
+      return i.id!==editInvId && (i.slab_ids||[]).indexOf(sid)!==-1;
+    });
+    if(otherInv){
+      var s=slabs.find(function(x){return x.id===sid;});
+      conflicts.push((s?s.material+' #'+s.num:sid)+' → já na '+otherInv.num+' ('+otherInv.client+')');
+    }
+  });
+  if(conflicts.length>0){
+    if(!confirm('⚠️ ATENÇÃO — As seguintes chapas já estão em outra invoice:\n\n'+conflicts.join('\n')+'\n\nDeseja continuar mesmo assim?'))return;
+  }
   var inv={id:editInvId||uid(),num:num,client:client,client_addr:document.getElementById('icla').value.trim(),
     date:document.getElementById('idat').value,
     due_date:(document.getElementById('idue')&&document.getElementById('idue').value)?document.getElementById('idue').value:null,total:parseFloat(document.getElementById('itot').value)||0,
@@ -2691,6 +2710,36 @@ function renderAlerts(){
 // ── MATERIAL TRANSFER SHEET ───────────────────────────
 var trSelIds = [];
 
+function renderTransfersList(){
+  var el = document.getElementById('transfers-list');
+  if(!el)return;
+  if(!transfers||!transfers.length){
+    el.innerHTML='<div class="empty" style="padding:16px">Nenhum transfer gerado ainda.</div>';
+    return;
+  }
+  var sorted = transfers.slice().sort(function(a,b){return (b.created_at||'').localeCompare(a.created_at||'');});
+  el.innerHTML = sorted.map(function(t,i){
+    var slabCount = (t.slab_ids||[]).length;
+    var bg = i%2===0?'var(--b1)':'var(--b2)';
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border:.5px solid var(--br1);border-radius:var(--r);margin-bottom:6px;background:'+bg+'">'+
+      '<div>'+
+        '<div style="font-weight:600;font-size:13px">📋 '+t.num+'</div>'+
+        '<div style="font-size:12px;color:var(--t2);margin-top:2px">'+
+          '<strong>Para:</strong> '+t.to_name+' · '+
+          '<strong>Data:</strong> '+(t.date||'—')+' · '+
+          '<strong>'+slabCount+' chapas</strong>'+
+        '</div>'+
+        (t.notes?'<div style="font-size:11px;color:var(--t2);margin-top:2px">'+t.notes+'</div>':'')+
+      '</div>'+
+      '<div style="display:flex;gap:6px">'+
+        '<button class="btn sm p" onclick="reprintTransfer(this.dataset.id)" data-id="'+t.id+'">🖨 Reimprimir</button>'+
+        '<button class="btn sm" onclick="editTransfer(this.dataset.id)" data-id="'+t.id+'">✏ Editar</button>'+
+        '<button class="btn sm dn" onclick="deleteTransfer(this.dataset.id)" data-id="'+t.id+'">✕</button>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+}
+
 function initTransferPage(){
   // Fill defaults from cfg
   document.getElementById('tr-from-name').value = cfg.name||'DILEAN MARBLES';
@@ -2710,6 +2759,7 @@ function initTransferPage(){
     var o=document.createElement('option');o.value=c.id;o.textContent=c.name;cliSel.appendChild(o);
   });
   renderTransferChips();
+  renderTransfersList();
 }
 
 function fillTransferClient(){
@@ -2826,7 +2876,7 @@ function renderTransferPreview(){
   document.getElementById('tr-preview').innerHTML = html;
 }
 
-function printTransfer(){
+async function printTransfer(){
   var data = buildTransferRows();
   if(!data.total){alert('Selecione pelo menos uma chapa.');return;}
 
@@ -2947,10 +2997,25 @@ function printTransfer(){
 
   document.getElementById('print-area').innerHTML = html;
 
+  // Save transfer record
+  var transferNum = 'TRF-'+(String(transfers.length+1).padStart(3,'0'));
+  if(editTransferId){
+    var existing = transfers.find(function(t){return t.id===editTransferId;});
+    transferNum = existing?existing.num:transferNum;
+  }
+  var transferData = {
+    num: transferNum,
+    date: trDate,
+    from_name: fromName, from_addr: fromAddr, from_city: fromCity,
+    to_name: toName, to_addr: toAddr, to_city: toCity,
+    slab_ids: trSelIds.slice(),
+    shipper: shipper, driver: driver, notes: notes
+  };
+  await saveTransferRecord(transferData);
+
   // Ask if should update slab locations
-  var newLoc = toName;
-  if(confirm('Transfer Sheet gerado!\n\nDeseja atualizar o local das ' + data.total + ' chapa(s) para "' + newLoc + '" no estoque?')){
-    updateSlabLocations(newLoc);
+  if(confirm('Transfer Sheet gerado!\n\nDeseja atualizar o local das ' + data.total + ' chapa(s) para "' + toName + '" no estoque?')){
+    updateSlabLocations(toName);
   } else {
     window.print();
   }
@@ -4664,6 +4729,88 @@ async function printContainerReport(){
   window.print();
 }
 
+
+// ── SAVE / EDIT / DELETE TRANSFERS ───────────────────
+var editTransferId = null;
+
+async function saveTransferRecord(transferData){
+  try{
+    if(editTransferId){
+      // Update existing
+      await sbU('transfers', editTransferId, transferData);
+      transfers = transfers.map(function(t){return t.id===editTransferId?Object.assign({},t,transferData):t;});
+    } else {
+      // Create new
+      var newT = Object.assign({id:uid(), created_at:new Date().toISOString()}, transferData);
+      await sbI('transfers', newT);
+      transfers.push(newT);
+    }
+    editTransferId = null;
+    renderTransfersList();
+  } catch(e){
+    console.error('Error saving transfer:', e);
+  }
+}
+
+function editTransfer(id){
+  var t = transfers.find(function(x){return x.id===id;});
+  if(!t)return;
+  editTransferId = id;
+
+  // Pre-fill the form
+  document.getElementById('tr-from-name').value = t.from_name||'';
+  document.getElementById('tr-from-addr').value = t.from_addr||'';
+  document.getElementById('tr-from-city').value = t.from_city||'';
+  document.getElementById('tr-date').value = t.date||'';
+  document.getElementById('tr-to-name').value = t.to_name||'';
+  document.getElementById('tr-to-addr').value = t.to_addr||'';
+  document.getElementById('tr-to-city').value = t.to_city||'';
+  document.getElementById('tr-shipper').value = t.shipper||'';
+  document.getElementById('tr-driver').value = t.driver||'';
+  document.getElementById('tr-notes').value = t.notes||'';
+
+  // Restore selected slabs
+  trSelIds = Array.isArray(t.slab_ids)?t.slab_ids.slice():[];
+  renderTransferChips();
+  renderTransferPreview();
+
+  // Scroll to form
+  document.getElementById('tr-from-name').scrollIntoView({behavior:'smooth'});
+  sync('ok','Transfer carregado para edição');
+}
+
+function reprintTransfer(id){
+  var t = transfers.find(function(x){return x.id===id;});
+  if(!t)return;
+  editTransferId = id;
+
+  // Fill form and trigger print
+  document.getElementById('tr-from-name').value = t.from_name||'';
+  document.getElementById('tr-from-addr').value = t.from_addr||'';
+  document.getElementById('tr-from-city').value = t.from_city||'';
+  document.getElementById('tr-date').value = t.date||'';
+  document.getElementById('tr-to-name').value = t.to_name||'';
+  document.getElementById('tr-to-addr').value = t.to_addr||'';
+  document.getElementById('tr-to-city').value = t.to_city||'';
+  document.getElementById('tr-shipper').value = t.shipper||'';
+  document.getElementById('tr-driver').value = t.driver||'';
+  document.getElementById('tr-notes').value = t.notes||'';
+  trSelIds = Array.isArray(t.slab_ids)?t.slab_ids.slice():[];
+
+  printTransfer();
+  editTransferId = null;
+}
+
+async function deleteTransfer(id){
+  if(!confirm('Excluir este transfer?'))return;
+  try{
+    sync('spin','Excluindo...');
+    await fetch(SB+'/rest/v1/transfers?id=eq.'+id,{method:'DELETE',headers:H});
+    transfers = transfers.filter(function(t){return t.id!==id;});
+    sync('ok','Excluído');
+    renderTransfersList();
+  }catch(e){sync('err','Erro');alert(e.message);}
+}
 
 function closeM(id){document.getElementById(id).classList.add('hidden');}
 document.querySelectorAll('.mb').forEach(function(m){m.addEventListener('click',function(e){if(e.target===m)m.classList.add('hidden');});});
