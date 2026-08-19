@@ -362,7 +362,9 @@ table tr:hover td{background:var(--b2);}
       </div>
 
       <!-- Client + Terms -->
-      <div class="sec">Destinatário e termos</div>
+      <div class="sec">Proformas salvas</div>
+      <div id="proformas-list" style="margin-bottom:16px"></div>
+      <div class="sec">Nova Proforma</div>
       <div class="fg" style="max-width:800px;margin-bottom:16px">
         <div class="fi">
           <label>Empresa *</label>
@@ -426,6 +428,8 @@ table tr:hover td{background:var(--b2);}
       </div>
       <div class="sec">Transfers gerados</div>
       <div id="transfers-list" style="margin-bottom:20px"></div>
+      <div class="sec">Packing Lists salvos</div>
+      <div id="packing-lists-list" style="margin-bottom:16px"></div>
       <div class="sec">Novo Transfer Sheet</div>
 
       <div class="fg" style="margin-bottom:16px;max-width:700px">
@@ -930,7 +934,7 @@ async function sbU(t,id,d){
 async function sbD(t,id){var r=await fetch(SB+'/rest/v1/'+t+'?id=eq.'+id,{method:'DELETE',headers:H});if(!r.ok)throw new Error(await r.text());}
 async function sbUpsert(t,d){var r=await fetch(SB+'/rest/v1/'+t,{method:'POST',headers:Object.assign({},H,{'Prefer':'resolution=merge-duplicates'}),body:JSON.stringify(d)});if(!r.ok)throw new Error(await r.text());return r.json();}
 
-var slabs=[],invoices=[],transfers=[],clients=[],bills=[],fixedExps=[],generalExps=[],containers=[],finBalance=0,finBalanceDate='',locs=['Meta Surface','ZTX Surfaces','Pacific Shore','Hope Solutions','Escritório'];
+var slabs=[],invoices=[],transfers=[],proformas=[],packingLists=[],clients=[],bills=[],fixedExps=[],generalExps=[],containers=[],finBalance=0,finBalanceDate='',locs=['Meta Surface','ZTX Surfaces','Pacific Shore','Hope Solutions','Escritório'];
 var editId=null,editInvId=null,editClientId=null,selLoc=null,selIds=[],curPhoto=null,eic=0;
 var cfg={name:'DILEAN MARBLES CORP',addr:'1661 E Sample Rd, Pompano Beach FL 33064',phone:'346 455 8150',email:'',bank:'Bank Of America, N.A.',acct:'8981 6729 0208',wire:'063100277',swift:'BOFAUS6S',zelle:'346 455 8150',bankAddr:'555 California St., San Francisco, CA 94104'};
 
@@ -980,12 +984,15 @@ async function init(){
   try{
     var r=await fetch(SB+'/rest/v1/slabs?limit=1',{headers:H});
     if(r.status===404||r.status===400||r.status===401){showSetup();return;}
-    var [sd,id,td,set]=await Promise.all([
+    var [sd,id,td,pfd,pld,set]=await Promise.all([
       sbGNoPhoto('slabs'),sbG('invoices'),
       sbG('transfers'),
+      sbG('proformas'),
+      sbG('packing_lists'),
       fetch(SB+'/rest/v1/settings',{headers:H}).then(function(r){return r.json();})
     ]);
     slabs=sd||[];invoices=id||[];transfers=td||[];
+    proformas=pfd||[];packingLists=pld||[];
     if(set&&Array.isArray(set)){
       set.forEach(function(s){
         if(s.key==='locations'&&s.value)locs=s.value;
@@ -1002,6 +1009,7 @@ async function init(){
     document.getElementById('loading-screen').classList.add('hidden');
     document.getElementById('page-inventory').classList.remove('hidden');
     rebuildSels();renderStats();renderTable();loadSettingsForm();renderAlerts();
+    renderProformasList();renderPackingListsList();
   }catch(e){
     if(e.message&&e.message.includes('does not exist')){showSetup();return;}
     sync('err','Erro de conexão');
@@ -2825,6 +2833,7 @@ function initTransferPage(){
   });
   renderTransferChips();
   renderTransfersList();
+  renderPackingListsList();
 }
 
 function fillTransferClient(){
@@ -4920,7 +4929,7 @@ function genProforma(invId){
   div.addEventListener('click',function(e){if(e.target===div)div.remove();});
 }
 
-function printProforma(invId){
+async function printProforma(invId){
   var inv = invoices.find(function(i){return i.id===invId;});
   if(!inv)return;
 
@@ -5040,6 +5049,7 @@ function printProforma(invId){
 
   document.getElementById('proforma-modal').remove();
   document.getElementById('print-area').innerHTML = html;
+  saveProformaDoc();
   window.print();
 }
 
@@ -5081,7 +5091,7 @@ function genPackingList(){
   div.addEventListener('click',function(e){if(e.target===div)div.remove();});
 }
 
-function printPackingList(){
+async function printPackingList(){
   var selSlabs = trSelIds.map(function(id){return slabs.find(function(s){return s.id===id;});}).filter(Boolean);
   if(!selSlabs.length){alert('Selecione chapas na aba Transfer primeiro.');return;}
 
@@ -5211,8 +5221,14 @@ function printPackingList(){
       'DILEAN MARBLES CORP · Packing List · '+plNum+' · '+dateFmt+
     '</div></div>';
 
+  var plData = {
+    num: plNum, date: plDate, shipper: shipper, consignee: consignee,
+    vessel: vessel, pol: pol, pod: pod, avg_weight: avgWeight,
+    slab_ids: trSelIds.slice()
+  };
   document.getElementById('packing-modal').remove();
   document.getElementById('print-area').innerHTML = html;
+  await savePackingListDoc(plData);
   window.print();
 }
 
@@ -5305,7 +5321,7 @@ function selectAllProformaVisible(){
   renderProformaChips();
 }
 
-function printStandaloneProforma(){
+async function printStandaloneProforma(){
   var selSlabs = pfsSelIds.map(function(id){return slabs.find(function(s){return s.id===id;});}).filter(Boolean);
   if(!selSlabs.length){alert('Selecione pelo menos uma chapa.');return;}
 
@@ -5429,6 +5445,209 @@ function printStandaloneProforma(){
 
   document.getElementById('print-area').innerHTML = html;
   window.print();
+}
+
+// ══════════════════════════════════════════════════════
+// PROFORMAS — SAVE / LIST / EDIT / DELETE
+// ══════════════════════════════════════════════════════
+var editProformaId = null;
+
+function renderProformasList(){
+  var el = document.getElementById('proformas-list');
+  if(!el)return;
+  if(!proformas||!proformas.length){
+    el.innerHTML='<div class="empty" style="padding:12px">Nenhuma proforma salva ainda.</div>';
+    return;
+  }
+  var sorted = proformas.slice().sort(function(a,b){return (b.created_at||'').localeCompare(a.created_at||'');});
+  el.innerHTML = sorted.map(function(p,i){
+    var bg = i%2===0?'var(--b1)':'var(--b2)';
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border:.5px solid var(--br1);border-radius:var(--r);margin-bottom:6px;background:'+bg+'">'+
+      '<div>'+
+        '<div style="font-weight:600;font-size:13px;color:#6b3fa0">🗒 '+p.num+'</div>'+
+        '<div style="font-size:12px;color:var(--t2);margin-top:2px">'+
+          '<strong>Para:</strong> '+p.to_name+' · '+
+          '<strong>Data:</strong> '+(p.date||'—')+' · '+
+          '<strong>'+(p.slab_ids||[]).length+' chapas</strong>'+
+        '</div>'+
+        (p.terms?'<div style="font-size:11px;color:var(--t2);margin-top:2px">'+p.terms+'</div>':'')+
+      '</div>'+
+      '<div style="display:flex;gap:6px">'+
+        '<button class="btn sm" onclick="reprintProforma(this.dataset.id)" data-id="'+p.id+'" style="border-color:#6b3fa0;color:#6b3fa0">🖨 Reimprimir</button>'+
+        '<button class="btn sm" onclick="editProformaDoc(this.dataset.id)" data-id="'+p.id+'">✏ Editar</button>'+
+        '<button class="btn sm dn" onclick="deleteProformaDoc(this.dataset.id)" data-id="'+p.id+'">✕</button>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+}
+
+async function saveProformaDoc(){
+  var data = {
+    num: document.getElementById('pfs-num').value||'PRO-001',
+    date: document.getElementById('pfs-date').value||null,
+    to_name: document.getElementById('pfs-to-name').value||'',
+    to_addr: document.getElementById('pfs-to-addr').value||'',
+    to_city: document.getElementById('pfs-to-city').value||'',
+    valid_for: document.getElementById('pfs-valid').value||'',
+    terms: document.getElementById('pfs-terms').value||'',
+    incoterms: document.getElementById('pfs-inco').value||'',
+    port: document.getElementById('pfs-port').value||'',
+    notes: document.getElementById('pfs-notes').value||'',
+    slab_ids: pfsSelIds.slice()
+  };
+  try{
+    if(editProformaId){
+      await sbU('proformas', editProformaId, data);
+      proformas = proformas.map(function(p){return p.id===editProformaId?Object.assign({},p,data):p;});
+      editProformaId = null;
+    } else {
+      var newP = Object.assign({id:uid(),created_at:new Date().toISOString()},data);
+      await sbI('proformas', newP);
+      proformas.push(newP);
+    }
+    renderProformasList();
+  }catch(e){console.error('Save proforma error',e);}
+}
+
+function editProformaDoc(id){
+  var p = proformas.find(function(x){return x.id===id;});
+  if(!p)return;
+  editProformaId = id;
+  document.getElementById('pfs-num').value = p.num||'';
+  document.getElementById('pfs-date').value = p.date||'';
+  document.getElementById('pfs-to-name').value = p.to_name||'';
+  document.getElementById('pfs-to-addr').value = p.to_addr||'';
+  document.getElementById('pfs-to-city').value = p.to_city||'';
+  document.getElementById('pfs-valid').value = p.valid_for||'';
+  document.getElementById('pfs-terms').value = p.terms||'';
+  document.getElementById('pfs-inco').value = p.incoterms||'CIF';
+  document.getElementById('pfs-port').value = p.port||'';
+  document.getElementById('pfs-notes').value = p.notes||'';
+  pfsSelIds = Array.isArray(p.slab_ids)?p.slab_ids.slice():[];
+  renderProformaChips();
+  document.getElementById('pfs-num').scrollIntoView({behavior:'smooth'});
+  sync('ok','Proforma carregada para edição');
+}
+
+function reprintProforma(id){
+  var p = proformas.find(function(x){return x.id===id;});
+  if(!p)return;
+  editProformaId = id;
+  document.getElementById('pfs-num').value = p.num||'';
+  document.getElementById('pfs-date').value = p.date||'';
+  document.getElementById('pfs-to-name').value = p.to_name||'';
+  document.getElementById('pfs-to-addr').value = p.to_addr||'';
+  document.getElementById('pfs-to-city').value = p.to_city||'';
+  document.getElementById('pfs-valid').value = p.valid_for||'';
+  document.getElementById('pfs-terms').value = p.terms||'';
+  document.getElementById('pfs-inco').value = p.incoterms||'CIF';
+  document.getElementById('pfs-port').value = p.port||'';
+  document.getElementById('pfs-notes').value = p.notes||'';
+  pfsSelIds = Array.isArray(p.slab_ids)?p.slab_ids.slice():[];
+  printStandaloneProforma();
+  editProformaId = null;
+}
+
+async function deleteProformaDoc(id){
+  if(!confirm('Excluir esta proforma?'))return;
+  try{
+    sync('spin','Excluindo...');
+    await fetch(SB+'/rest/v1/proformas?id=eq.'+id,{method:'DELETE',headers:H});
+    proformas = proformas.filter(function(p){return p.id!==id;});
+    sync('ok','Excluída');
+    renderProformasList();
+  }catch(e){sync('err','Erro');alert(e.message);}
+}
+
+// ══════════════════════════════════════════════════════
+// PACKING LISTS — SAVE / LIST / EDIT / DELETE
+// ══════════════════════════════════════════════════════
+var editPackingId = null;
+
+function renderPackingListsList(){
+  var el = document.getElementById('packing-lists-list');
+  if(!el)return;
+  if(!packingLists||!packingLists.length){
+    el.innerHTML='<div class="empty" style="padding:12px">Nenhum packing list salvo ainda.</div>';
+    return;
+  }
+  var sorted = packingLists.slice().sort(function(a,b){return (b.created_at||'').localeCompare(a.created_at||'');});
+  el.innerHTML = sorted.map(function(p,i){
+    var bg = i%2===0?'var(--b1)':'var(--b2)';
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border:.5px solid var(--br1);border-radius:var(--r);margin-bottom:6px;background:'+bg+'">'+
+      '<div>'+
+        '<div style="font-weight:600;font-size:13px;color:#185fa5">📦 '+p.num+'</div>'+
+        '<div style="font-size:12px;color:var(--t2);margin-top:2px">'+
+          '<strong>Para:</strong> '+(p.consignee||'—')+' · '+
+          '<strong>Data:</strong> '+(p.date||'—')+' · '+
+          '<strong>'+(p.slab_ids||[]).length+' chapas</strong>'+
+        '</div>'+
+        (p.vessel?'<div style="font-size:11px;color:var(--t2);margin-top:2px">Vessel: '+p.vessel+'</div>':'')+
+      '</div>'+
+      '<div style="display:flex;gap:6px">'+
+        '<button class="btn sm" onclick="reprintPackingList(this.dataset.id)" data-id="'+p.id+'" style="border-color:#185fa5;color:#185fa5">🖨 Reimprimir</button>'+
+        '<button class="btn sm" onclick="editPackingListDoc(this.dataset.id)" data-id="'+p.id+'">✏ Editar</button>'+
+        '<button class="btn sm dn" onclick="deletePackingListDoc(this.dataset.id)" data-id="'+p.id+'">✕</button>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+}
+
+async function savePackingListDoc(data){
+  try{
+    if(editPackingId){
+      await sbU('packing_lists', editPackingId, data);
+      packingLists = packingLists.map(function(p){return p.id===editPackingId?Object.assign({},p,data):p;});
+      editPackingId = null;
+    } else {
+      var newP = Object.assign({id:uid(),created_at:new Date().toISOString()},data);
+      await sbI('packing_lists', newP);
+      packingLists.push(newP);
+    }
+    renderPackingListsList();
+  }catch(e){console.error('Save packing list error',e);}
+}
+
+function editPackingListDoc(id){
+  var p = packingLists.find(function(x){return x.id===id;});
+  if(!p)return;
+  editPackingId = id;
+  // Restore slab selection in transfer tab
+  trSelIds = Array.isArray(p.slab_ids)?p.slab_ids.slice():[];
+  renderTransferChips();
+  // Scroll to packing list button
+  sync('ok','Packing List carregado — ajuste e gere novamente');
+}
+
+async function reprintPackingList(id){
+  var p = packingLists.find(function(x){return x.id===id;});
+  if(!p)return;
+  editPackingId = id;
+  trSelIds = Array.isArray(p.slab_ids)?p.slab_ids.slice():[];
+
+  // Open modal pre-filled
+  genPackingList();
+  setTimeout(function(){
+    if(document.getElementById('pl-num'))document.getElementById('pl-num').value = p.num||'';
+    if(document.getElementById('pl-date'))document.getElementById('pl-date').value = p.date||'';
+    if(document.getElementById('pl-shipper'))document.getElementById('pl-shipper').value = p.shipper||'DILEAN MARBLES CORP';
+    if(document.getElementById('pl-consignee'))document.getElementById('pl-consignee').value = p.consignee||'';
+    if(document.getElementById('pl-vessel'))document.getElementById('pl-vessel').value = p.vessel||'';
+    if(document.getElementById('pl-pol'))document.getElementById('pl-pol').value = p.pol||'';
+    if(document.getElementById('pl-pod'))document.getElementById('pl-pod').value = p.pod||'';
+    if(document.getElementById('pl-weight'))document.getElementById('pl-weight').value = p.avg_weight||150;
+  },100);
+}
+
+async function deletePackingListDoc(id){
+  if(!confirm('Excluir este packing list?'))return;
+  try{
+    sync('spin','Excluindo...');
+    await fetch(SB+'/rest/v1/packing_lists?id=eq.'+id,{method:'DELETE',headers:H});
+    packingLists = packingLists.filter(function(p){return p.id!==id;});
+    sync('ok','Excluído');
+    renderPackingListsList();
+  }catch(e){sync('err','Erro');alert(e.message);}
 }
 
 function closeM(id){document.getElementById(id).classList.add('hidden');}
