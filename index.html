@@ -421,9 +421,9 @@ table tr:hover td{background:var(--b2);}
           <div style="font-size:15px;font-weight:500">Material Transfer Sheet</div>
           <div style="font-size:12px;color:var(--t2)">Gere o documento de transferência de material para consignação</div>
         </div>
-        <div style="display:flex;gap:8px">
-          <button class="btn p" onclick="printTransfer()">🖨 Novo Transfer</button>
-          <button class="btn" onclick="genPackingList()" style="border-color:#185fa5;color:#185fa5">📦 Packing List</button>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn p" onclick="printTransfer()" style="min-width:140px;padding:8px 16px">🖨 Gerar Transfer</button>
+          <button class="btn" onclick="genPackingList()" style="border-color:#185fa5;color:#185fa5;min-width:140px;padding:8px 16px">📦 Packing List</button>
         </div>
       </div>
       <div class="sec">Transfers gerados</div>
@@ -986,9 +986,9 @@ async function init(){
     if(r.status===404||r.status===400||r.status===401){showSetup();return;}
     var [sd,id,td,pfd,pld,set]=await Promise.all([
       sbGNoPhoto('slabs'),sbG('invoices'),
-      sbG('transfers'),
-      sbG('proformas'),
-      sbG('packing_lists'),
+      sbG('transfers').catch(function(){return[];}),
+      sbG('proformas').catch(function(){return[];}),
+      sbG('packing_lists').catch(function(){return[];}),
       fetch(SB+'/rest/v1/settings',{headers:H}).then(function(r){return r.json();})
     ]);
     slabs=sd||[];invoices=id||[];transfers=td||[];
@@ -5507,7 +5507,10 @@ async function saveProformaDoc(){
       proformas.push(newP);
     }
     renderProformasList();
-  }catch(e){console.error('Save proforma error',e);}
+  }catch(e){
+    console.error('Save proforma error',e);
+    alert('Erro ao salvar proforma: '+e.message);
+  }
 }
 
 function editProformaDoc(id){
@@ -5672,7 +5675,7 @@ function closeM(id){document.getElementById(id).classList.add('hidden');}
 document.querySelectorAll('.mb').forEach(function(m){m.addEventListener('click',function(e){if(e.target===m)m.classList.add('hidden');});});
 function showPage(p){
   ['inventory','visual','invoices','report','clients','containers','financeiro','proforma','transfer','alerts','bills','settings'].forEach(function(pg){document.getElementById('page-'+pg).classList.toggle('hidden',pg!==p);});
-  document.querySelectorAll('.nb').forEach(function(b,i){b.classList.toggle('active',['inventory','visual','invoices','report','clients','containers','financeiro','proforma','transfer','alerts','bills','settings'][i]===p);});
+  document.querySelectorAll('.nb').forEach(function(b,i){b.classList.toggle('active',['inventory','visual','invoices','report','clients','containers','financeiro','transfer','alerts','bills','settings'][i]===p);});
   if(p==='visual')renderVis();
   if(p==='invoices')renderInvoices();
   if(p==='report')renderReport();
