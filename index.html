@@ -5056,32 +5056,28 @@ async function printProforma(invId){
 // ══════════════════════════════════════════════════════
 // PACKING LIST
 // ══════════════════════════════════════════════════════
-function genPackingList(){
+function genPackingList(prefill){
   var selSlabs = trSelIds.map(function(id){return slabs.find(function(s){return s.id===id;});}).filter(Boolean);
-
   var existing = document.getElementById('packing-modal');
   if(existing) existing.remove();
-
+  var toName = document.getElementById('tr-to-name')?document.getElementById('tr-to-name').value:'';
   var div = document.createElement('div');
   div.id = 'packing-modal';
   div.className = 'mb';
   div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:300';
-  div.innerHTML = '<div class="mo" style="width:min(580px,96vw)">'+
+  div.innerHTML = '<div class="mo" style="width:min(560px,96vw)">'+
     '<h3>📦 Packing List</h3>'+
-    (selSlabs.length?
-      '<div style="background:var(--b2);border-radius:var(--r);padding:8px 12px;margin-bottom:12px;font-size:12px">'+
-        selSlabs.length+' chapas selecionadas no Transfer</div>'
-      :'<div style="background:#faeeda;border-radius:var(--r);padding:8px 12px;margin-bottom:12px;font-size:12px;color:#854f0b">'+
-        '⚠ Nenhuma chapa selecionada. Selecione chapas na aba Transfer primeiro.</div>')+
+    (selSlabs.length
+      ?'<div style="background:var(--b2);border-radius:var(--r);padding:8px 12px;margin-bottom:12px;font-size:12px">'+selSlabs.length+' chapas selecionadas</div>'
+      :'<div style="background:#faeeda;border-radius:var(--r);padding:8px 12px;margin-bottom:12px;font-size:12px;color:#854f0b">⚠ Selecione chapas primeiro (na seção abaixo ou via Transfer).</div>')+
     '<div class="fg">'+
-      '<div class="fi"><label>Packing List No.</label><input id="pl-num" value="PL-'+String(Date.now()).slice(-4)+'"></div>'+
-      '<div class="fi"><label>Date</label><input id="pl-date" type="date" value="'+new Date().toISOString().slice(0,10)+'"></div>'+
+      '<div class="fi"><label>Packing List No.</label><input id="pl-num" value="'+(prefill&&prefill.num?prefill.num:'PL-'+new Date().toISOString().slice(2,10).replace(/-/g,''))+'"></div>'+
+      '<div class="fi"><label>Date</label><input id="pl-date" type="date" value="'+(prefill&&prefill.date?prefill.date:new Date().toISOString().slice(0,10))+'"></div>'+
       '<div class="fi"><label>Shipper</label><input id="pl-shipper" value="DILEAN MARBLES CORP"></div>'+
-      '<div class="fi"><label>Consignee</label><input id="pl-consignee" value="'+(document.getElementById('tr-to-name')?document.getElementById('tr-to-name').value:'')+'"></div>'+
-      '<div class="fi"><label>Vessel / Flight No.</label><input id="pl-vessel" placeholder="ex: MSC OSCAR / AA1234"></div>'+
-      '<div class="fi"><label>Port of Loading</label><input id="pl-pol" placeholder="ex: Houston, TX, USA"></div>'+
-      '<div class="fi"><label>Port of Discharge</label><input id="pl-pod" placeholder="ex: Santos, Brasil"></div>'+
-      '<div class="fi"><label>Peso médio por slab (kg)</label><input id="pl-weight" type="number" value="150" min="0" step="1" placeholder="kg por chapa"></div>'+
+      '<div class="fi"><label>Consignee</label><input id="pl-consignee" value="'+(prefill&&prefill.consignee?prefill.consignee:toName)+'"></div>'+
+      '<div class="fi"><label>Vessel / Truck / Flight</label><input id="pl-vessel" placeholder="ex: MSC OSCAR" value="'+(prefill&&prefill.vessel?prefill.vessel:'')+'"></div>'+
+      '<div class="fi"><label>Port of Loading</label><input id="pl-pol" placeholder="ex: Houston, TX" value="'+(prefill&&prefill.pol?prefill.pol:'')+'"></div>'+
+      '<div class="fi"><label>Port of Discharge</label><input id="pl-pod" placeholder="ex: Santos, Brasil" value="'+(prefill&&prefill.pod?prefill.pod:'')+'"></div>'+
     '</div>'+
     '<div class="ma">'+
       '<button class="btn" onclick="document.getElementById(&quot;packing-modal&quot;).remove()">Cancelar</button>'+
@@ -5093,54 +5089,58 @@ function genPackingList(){
 
 async function printPackingList(){
   var selSlabs = trSelIds.map(function(id){return slabs.find(function(s){return s.id===id;});}).filter(Boolean);
-  if(!selSlabs.length){alert('Selecione chapas na aba Transfer primeiro.');return;}
+  if(!selSlabs.length){alert('Selecione pelo menos uma chapa.');return;}
 
   var plNum     = document.getElementById('pl-num').value||'PL-001';
   var plDate    = document.getElementById('pl-date').value||'';
   var shipper   = document.getElementById('pl-shipper').value||'DILEAN MARBLES CORP';
   var consignee = document.getElementById('pl-consignee').value||'';
-  var vessel    = document.getElementById('pl-vessel').value||'—';
-  var pol       = document.getElementById('pl-pol').value||'—';
-  var pod       = document.getElementById('pl-pod').value||'—';
-  var avgWeight = parseFloat(document.getElementById('pl-weight').value)||150;
+  var vessel    = document.getElementById('pl-vessel').value||'';
+  var pol       = document.getElementById('pl-pol').value||'';
+  var pod       = document.getElementById('pl-pod').value||'';
   var now       = new Date();
+  var dateFmt   = plDate?(function(){var p=plDate.split('-');return p[1]+'/'+p[2]+'/'+p[0];})():'';
 
-  // Format date
-  var dateFmt = plDate?(function(){var p=plDate.split('-');return p[1]+'/'+p[2]+'/'+p[0];})():'';
-
-  // Group by lot + material (bundles)
+  // Group slabs by lot + material
   var bundles = {};
   selSlabs.forEach(function(s){
     var k = s.lot+'||'+s.material;
-    if(!bundles[k])bundles[k]={lot:s.lot,material:s.material,slabs:[],totalSqft:0,grossWeight:0};
-    var sf = sqft(s);
+    if(!bundles[k])bundles[k]={lot:s.lot,material:s.material,type:s.type||'',slabs:[]};
     bundles[k].slabs.push(s);
-    bundles[k].totalSqft += sf;
-    bundles[k].grossWeight += avgWeight;
   });
 
-  var totalSlabs  = selSlabs.length;
-  var totalSqft   = selSlabs.reduce(function(a,s){return a+sqft(s);},0);
-  var totalWeight = totalSlabs * avgWeight;
+  var totalSlabs = selSlabs.length;
+  var totalSqft  = selSlabs.reduce(function(a,s){return a+sqft(s);},0);
   var totalBundles = Object.keys(bundles).length;
 
-  var rows = Object.values(bundles).map(function(b,i){
-    var numsSorted = b.slabs.map(function(s){return s.num;}).sort(function(a,c){return parseInt(a)-parseInt(c);});
-    var bg = i%2===0?'#fff':'#f5f8fc';
-    return '<tr style="background:'+bg+'">'+
-      '<td style="padding:6px 10px;font-size:11px;font-weight:600">'+(i+1)+'</td>'+
-      '<td style="padding:6px 10px;font-size:11px">'+b.material+'</td>'+
-      '<td style="padding:6px 10px;font-size:11px">'+b.lot+'</td>'+
-      '<td style="padding:6px 10px;font-size:11px;text-align:center">'+b.slabs.length+' pcs</td>'+
-      '<td style="padding:6px 10px;font-size:11px">'+numsSorted.join(', ')+'</td>'+
-      '<td style="padding:6px 10px;font-size:11px;text-align:right">'+b.totalSqft.toFixed(2)+' sqft</td>'+
-      '<td style="padding:6px 10px;font-size:11px;text-align:right">'+b.grossWeight+' kg</td>'+
-      '</tr>';
-  }).join('');
+  // Build rows — one row per SLAB with full dimensions
+  var rows = '';
+  var lineNum = 1;
+  Object.values(bundles).sort(function(a,b){return a.lot.localeCompare(b.lot,undefined,{numeric:true});}).forEach(function(b){
+    // Bundle header
+    rows += '<tr style="background:#e8f1fb">'+
+      '<td colspan="7" style="padding:5px 10px;font-size:11px;font-weight:700;color:#185fa5">'+
+        'Lot '+b.lot+' — '+b.material+(b.type?' ('+b.type+')':'')+' — '+b.slabs.length+' slabs'+
+      '</td></tr>';
+    // Each slab
+    b.slabs.sort(function(a,c){return parseInt(a.num)-parseInt(c.num);}).forEach(function(s){
+      var w = s.width?+(s.width/2.54).toFixed(1)+'cm ('+s.width+'")':'—';
+      var h = s.height?+(s.height/2.54).toFixed(1)+'cm ('+s.height+'")':'—';
+      var sf = sqft(s);
+      rows += '<tr style="background:'+(lineNum%2===0?'#f5f8fc':'#fff')+'">'+
+        '<td style="padding:5px 10px;font-size:11px;text-align:center">'+lineNum+'</td>'+
+        '<td style="padding:5px 10px;font-size:11px;font-weight:600">#'+s.num+'</td>'+
+        '<td style="padding:5px 10px;font-size:11px">'+b.lot+'</td>'+
+        '<td style="padding:5px 10px;font-size:11px">'+b.material+'</td>'+
+        '<td style="padding:5px 10px;font-size:11px;text-align:center">'+w+'</td>'+
+        '<td style="padding:5px 10px;font-size:11px;text-align:center">'+h+'</td>'+
+        '<td style="padding:5px 10px;font-size:11px;text-align:right">'+(sf?sf.toFixed(2)+' sqft':'—')+'</td>'+
+        '</tr>';
+      lineNum++;
+    });
+  });
 
-  var html = '<div style="font-family:Arial,sans-serif;color:#000;padding:28px;max-width:860px">'+
-
-    // Header
+  var html = '<div style="font-family:Arial,sans-serif;color:#000;padding:28px;max-width:900px">'+
     '<div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:12px;border-bottom:3px solid #185fa5;margin-bottom:16px">'+
       '<div>'+
         '<div style="font-size:20px;font-weight:700;color:#185fa5">DILEAN MARBLES CORP</div>'+
@@ -5149,12 +5149,11 @@ async function printPackingList(){
       '</div>'+
       '<div style="text-align:right">'+
         '<div style="font-size:20px;font-weight:700;color:#185fa5">PACKING LIST</div>'+
-        '<div style="font-size:12px;font-weight:600;margin-top:4px"># '+plNum+'</div>'+
+        '<div style="font-size:13px;font-weight:600;margin-top:4px"># '+plNum+'</div>'+
         '<div style="font-size:11px;color:#666">Date: '+dateFmt+'</div>'+
       '</div>'+
     '</div>'+
 
-    // Shipper / Consignee / Shipping info
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">'+
       '<div style="border:.5px solid #b0c8eb;border-radius:6px;padding:10px">'+
         '<div style="font-size:10px;font-weight:700;color:#185fa5;text-transform:uppercase;margin-bottom:5px">Shipper</div>'+
@@ -5167,64 +5166,53 @@ async function printPackingList(){
       '</div>'+
     '</div>'+
 
-    '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;font-size:11px">'+
+    '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px;font-size:11px">'+
       '<div style="border:.5px solid #b0c8eb;border-radius:5px;padding:8px">'+
-        '<div style="font-size:9px;font-weight:700;color:#185fa5;text-transform:uppercase;margin-bottom:3px">Vessel/Flight</div>'+
-        '<div>'+vessel+'</div></div>'+
+        '<div style="font-size:9px;font-weight:700;color:#185fa5;text-transform:uppercase;margin-bottom:3px">Vessel/Truck</div>'+
+        '<div>'+(vessel||'—')+'</div></div>'+
       '<div style="border:.5px solid #b0c8eb;border-radius:5px;padding:8px">'+
         '<div style="font-size:9px;font-weight:700;color:#185fa5;text-transform:uppercase;margin-bottom:3px">Port of Loading</div>'+
-        '<div>'+pol+'</div></div>'+
+        '<div>'+(pol||'—')+'</div></div>'+
       '<div style="border:.5px solid #b0c8eb;border-radius:5px;padding:8px">'+
         '<div style="font-size:9px;font-weight:700;color:#185fa5;text-transform:uppercase;margin-bottom:3px">Port of Discharge</div>'+
-        '<div>'+pod+'</div></div>'+
-      '<div style="border:.5px solid #b0c8eb;border-radius:5px;padding:8px">'+
-        '<div style="font-size:9px;font-weight:700;color:#185fa5;text-transform:uppercase;margin-bottom:3px">Packages</div>'+
-        '<div>'+totalBundles+' bundles / '+totalSlabs+' pcs</div></div>'+
+        '<div>'+(pod||'—')+'</div></div>'+
     '</div>'+
 
-    // Items table
     '<table style="width:100%;border-collapse:collapse;margin-bottom:14px">'+
       '<thead><tr style="background:#185fa5;color:#fff">'+
-        '<th style="padding:7px 10px;text-align:left;width:5%">#</th>'+
-        '<th style="padding:7px 10px;text-align:left">Description / Material</th>'+
-        '<th style="padding:7px 10px;text-align:left">Bundle/Lot</th>'+
-        '<th style="padding:7px 10px;text-align:center;width:10%">Qty</th>'+
-        '<th style="padding:7px 10px;text-align:left">Slab Numbers</th>'+
-        '<th style="padding:7px 10px;text-align:right;width:12%">Net Sqft</th>'+
-        '<th style="padding:7px 10px;text-align:right;width:12%">Gross Wt.</th>'+
+        '<th style="padding:7px 10px;text-align:center;width:5%">#</th>'+
+        '<th style="padding:7px 10px;text-align:left;width:8%">Slab</th>'+
+        '<th style="padding:7px 10px;text-align:left;width:12%">Lot</th>'+
+        '<th style="padding:7px 10px;text-align:left">Material</th>'+
+        '<th style="padding:7px 10px;text-align:center;width:13%">Width</th>'+
+        '<th style="padding:7px 10px;text-align:center;width:13%">Height</th>'+
+        '<th style="padding:7px 10px;text-align:right;width:10%">Sqft</th>'+
       '</tr></thead>'+
       '<tbody>'+rows+'</tbody>'+
       '<tfoot><tr style="background:#e8f1fb;font-weight:700;border-top:2px solid #185fa5">'+
-        '<td colspan="3" style="padding:7px 10px;font-size:12px">TOTAL</td>'+
-        '<td style="padding:7px 10px;text-align:center;font-size:12px">'+totalSlabs+' pcs</td>'+
-        '<td style="padding:7px 10px;font-size:12px"></td>'+
-        '<td style="padding:7px 10px;text-align:right;font-size:12px">'+totalSqft.toFixed(2)+' sqft</td>'+
-        '<td style="padding:7px 10px;text-align:right;font-size:12px">'+totalWeight+' kg</td>'+
+        '<td colspan="6" style="padding:7px 10px">TOTAL — '+totalBundles+' bundle(s) / '+totalSlabs+' slabs</td>'+
+        '<td style="padding:7px 10px;text-align:right">'+totalSqft.toFixed(2)+' sqft</td>'+
       '</tr></tfoot>'+
     '</table>'+
 
-    // Signature
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:16px;font-size:11px">'+
       '<div style="border-top:1px solid #000;padding-top:8px">'+
-        '<div style="color:#666;margin-bottom:4px">Authorized Signature / Shipper</div>'+
-        '<div style="height:40px"></div>'+
+        '<div style="color:#666;margin-bottom:30px">Authorized Signature / Shipper</div>'+
         '<div style="font-weight:600">'+shipper+'</div>'+
       '</div>'+
       '<div style="border-top:1px solid #000;padding-top:8px">'+
-        '<div style="color:#666;margin-bottom:4px">Date</div>'+
-        '<div style="height:40px"></div>'+
+        '<div style="color:#666;margin-bottom:30px">Date</div>'+
         '<div>'+dateFmt+'</div>'+
       '</div>'+
     '</div>'+
-
     '<div style="text-align:center;font-size:10px;color:#aaa;margin-top:12px;border-top:1px solid #eee;padding-top:8px">'+
       'DILEAN MARBLES CORP · Packing List · '+plNum+' · '+dateFmt+
     '</div></div>';
 
   var plData = {
-    num: plNum, date: plDate, shipper: shipper, consignee: consignee,
-    vessel: vessel, pol: pol, pod: pod, avg_weight: avgWeight,
-    slab_ids: trSelIds.slice()
+    num:plNum, date:plDate||null, shipper:shipper, consignee:consignee,
+    vessel:vessel, pol:pol, pod:pod, avg_weight:0,
+    slab_ids:trSelIds.slice()
   };
   document.getElementById('packing-modal').remove();
   document.getElementById('print-area').innerHTML = html;
@@ -5482,18 +5470,19 @@ function renderProformasList(){
   }).join('');
 }
 
-async function saveProformaDoc(){
-  var data = {
-    num: document.getElementById('pfs-num').value||'PRO-001',
-    date: document.getElementById('pfs-date').value||null,
-    to_name: document.getElementById('pfs-to-name').value||'',
-    to_addr: document.getElementById('pfs-to-addr').value||'',
-    to_city: document.getElementById('pfs-to-city').value||'',
-    valid_for: document.getElementById('pfs-valid').value||'',
-    terms: document.getElementById('pfs-terms').value||'',
-    incoterms: document.getElementById('pfs-inco').value||'',
-    port: document.getElementById('pfs-port').value||'',
-    notes: document.getElementById('pfs-notes').value||'',
+async function saveProformaDoc(dataOverride){
+  var getEl = function(id,def){var el=document.getElementById(id);return el?el.value||def:def;};
+  var data = dataOverride || {
+    num: getEl('pfs-num','PRO-001'),
+    date: getEl('pfs-date',null)||null,
+    to_name: getEl('pfs-to-name',''),
+    to_addr: getEl('pfs-to-addr',''),
+    to_city: getEl('pfs-to-city',''),
+    valid_for: getEl('pfs-valid',''),
+    terms: getEl('pfs-terms',''),
+    incoterms: getEl('pfs-inco',''),
+    port: getEl('pfs-port',''),
+    notes: getEl('pfs-notes',''),
     slab_ids: pfsSelIds.slice()
   };
   try{
@@ -5657,18 +5646,12 @@ async function deletePackingListDoc(id){
 function packingFromProforma(proformaId){
   var p = proformas.find(function(x){return x.id===proformaId;});
   if(!p){alert('Proforma não encontrada.');return;}
-
-  // Load slabs from proforma into trSelIds
   trSelIds = Array.isArray(p.slab_ids)?p.slab_ids.slice():[];
-
-  // Open packing list modal pre-filled with proforma data
-  genPackingList();
-  setTimeout(function(){
-    var plNum = 'PL-'+p.num.replace(/\D/g,'');
-    if(document.getElementById('pl-num'))document.getElementById('pl-num').value = plNum;
-    if(document.getElementById('pl-date'))document.getElementById('pl-date').value = p.date||new Date().toISOString().slice(0,10);
-    if(document.getElementById('pl-consignee'))document.getElementById('pl-consignee').value = p.to_name||'';
-  }, 150);
+  genPackingList({
+    num: 'PL-'+p.num.replace(/[^0-9]/g,''),
+    date: p.date||new Date().toISOString().slice(0,10),
+    consignee: p.to_name||''
+  });
 }
 
 function closeM(id){document.getElementById(id).classList.add('hidden');}
