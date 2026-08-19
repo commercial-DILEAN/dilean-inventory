@@ -5049,7 +5049,7 @@ async function printProforma(invId){
 
   document.getElementById('proforma-modal').remove();
   document.getElementById('print-area').innerHTML = html;
-  saveProformaDoc();
+  await saveProformaDoc();
   window.print();
 }
 
@@ -5474,6 +5474,7 @@ function renderProformasList(){
       '</div>'+
       '<div style="display:flex;gap:6px">'+
         '<button class="btn sm" onclick="reprintProforma(this.dataset.id)" data-id="'+p.id+'" style="border-color:#6b3fa0;color:#6b3fa0">🖨 Reimprimir</button>'+
+        '<button class="btn sm" onclick="packingFromProforma(this.dataset.id)" data-id="'+p.id+'" style="border-color:#185fa5;color:#185fa5">📦 Packing List</button>'+
         '<button class="btn sm" onclick="editProformaDoc(this.dataset.id)" data-id="'+p.id+'">✏ Editar</button>'+
         '<button class="btn sm dn" onclick="deleteProformaDoc(this.dataset.id)" data-id="'+p.id+'">✕</button>'+
       '</div>'+
@@ -5648,6 +5649,23 @@ async function deletePackingListDoc(id){
     sync('ok','Excluído');
     renderPackingListsList();
   }catch(e){sync('err','Erro');alert(e.message);}
+}
+
+function packingFromProforma(proformaId){
+  var p = proformas.find(function(x){return x.id===proformaId;});
+  if(!p){alert('Proforma não encontrada.');return;}
+
+  // Load slabs from proforma into trSelIds
+  trSelIds = Array.isArray(p.slab_ids)?p.slab_ids.slice():[];
+
+  // Open packing list modal pre-filled with proforma data
+  genPackingList();
+  setTimeout(function(){
+    var plNum = 'PL-'+p.num.replace(/\D/g,'');
+    if(document.getElementById('pl-num'))document.getElementById('pl-num').value = plNum;
+    if(document.getElementById('pl-date'))document.getElementById('pl-date').value = p.date||new Date().toISOString().slice(0,10);
+    if(document.getElementById('pl-consignee'))document.getElementById('pl-consignee').value = p.to_name||'';
+  }, 150);
 }
 
 function closeM(id){document.getElementById(id).classList.add('hidden');}
