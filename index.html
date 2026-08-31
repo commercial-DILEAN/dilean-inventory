@@ -912,7 +912,7 @@ var H={'Content-Type':'application/json','apikey':SK,'Authorization':'Bearer '+S
 async function sbG(t,q){var r=await fetch(SB+'/rest/v1/'+t+'?order=created_at.asc'+(q||''),{headers:H});if(!r.ok)throw new Error(await r.text());return r.json();}
 async function sbGNoPhoto(t){
   // load slabs without photo field to avoid huge JSON
-  var cols='id,lot,num,material,type,width,height,location,price_per_sqft,status,sold_to,obs,created_at';
+  var cols='id,lot,num,material,type,width,height,location,price_per_sqft,cost_per_sqft,status,sold_to,obs,container_id,created_at';
   var r=await fetch(SB+'/rest/v1/'+t+'?order=created_at.asc&select='+cols,{headers:H});
   if(!r.ok)throw new Error(await r.text());
   return r.json();
@@ -926,7 +926,10 @@ async function sbGetPhoto(id){
 async function sbI(t,d){var r=await fetch(SB+'/rest/v1/'+t,{method:'POST',headers:H,body:JSON.stringify(d)});if(!r.ok)throw new Error(await r.text());return r.json();}
 async function sbU(t,id,d){
   var clean={};
-  Object.keys(d).forEach(function(k){clean[k]=(d[k]===''||d[k]===undefined)?null:d[k];});
+  Object.keys(d).forEach(function(k){
+    if(d[k]===undefined)return; // skip undefined — don't overwrite in DB
+    clean[k]=(d[k]==='')?null:d[k];
+  });
   var r=await fetch(SB+'/rest/v1/'+t+'?id=eq.'+id,{method:'PATCH',headers:H,body:JSON.stringify(clean)});
   if(!r.ok)throw new Error(await r.text());
   try{return r.json();}catch(e){return null;}
@@ -1349,7 +1352,12 @@ async function saveSlab(){
     location:document.getElementById('floc').value,price_per_sqft:parseFloat(document.getElementById('fp').value)||null,
     cost_per_sqft:parseFloat(document.getElementById('fc')?document.getElementById('fc').value:0)||null,
     status:document.getElementById('fst').value,
-    container_id:document.getElementById('fcont')?document.getElementById('fcont').value||null:null,sold_to:document.getElementById('fso').value.trim()||null,
+    container_id:(function(){
+      var el=document.getElementById('fcont');
+      if(!el)return undefined; // don't send if element doesn't exist
+      var v=el.value;
+      return v?v:null; // empty string -> null, populated -> value
+    })(),sold_to:document.getElementById('fso').value.trim()||null,
     obs:document.getElementById('fob').value.trim()||null,photo:curPhoto||null};
   try{
     sync('spin','Salvando...');
