@@ -143,10 +143,14 @@ table tr:hover td{background:var(--b2);}
 .setup pre{background:var(--b2);border-radius:var(--r);padding:12px;font-size:11px;white-space:pre-wrap;max-height:280px;overflow-y:auto;border:.5px solid var(--br1);margin-bottom:12px;}
 @media(max-width:500px){.fg{grid-template-columns:1fr;}}
 
-/* READ-ONLY MODE — only hides write actions, keeps view/print/export */
+/* READ-ONLY MODE */
 body.readonly .readonly-hide { display:none !important; }
-body.readonly input, body.readonly textarea { pointer-events:none; background:var(--b2) !important; }
-body.readonly select { pointer-events:none; }
+body.readonly .mb input,
+body.readonly .mb textarea,
+body.readonly .mb select,
+body.readonly .mo input,
+body.readonly .mo textarea,
+body.readonly .mo select { pointer-events:none !important; opacity:0.7; }
 </style>
 </head>
 <body>
@@ -5736,7 +5740,7 @@ var COST_CAT_LABELS = {
   delivery:'🚛 Frete interno', other:'📌 Outros'
 };
 
-function openContainerPayments(contId){if(READONLY){alert('Modo visualização — sem permissão para registrar pagamentos.');return;}
+function openContainerPayments(contId){if(READONLY){viewContainerPayments(contId);return;}
   var c = containers.find(function(x){return x.id===contId;});
   if(!c)return;
 
@@ -6060,6 +6064,67 @@ function openIMReadonly(invId){
       '<table style="width:100%;border-collapse:collapse">'+
       '<thead><tr style="background:var(--b2)"><th style="padding:6px 10px;font-size:11px;text-align:left">Data</th><th style="padding:6px 10px;font-size:11px;text-align:left">Valor</th><th style="padding:6px 10px;font-size:11px;text-align:left">Obs</th></tr></thead>'+
       '<tbody>'+payRows+'</tbody></table></div>':'')+
+  '</div>';
+  document.body.appendChild(div);
+  div.addEventListener('click',function(e){if(e.target===div)div.remove();});
+}
+
+function viewContainerPayments(contId){
+  var c = containers.find(function(x){return x.id===contId;});
+  if(!c)return;
+  var pays = (c.payments||[]).slice().sort(function(a,b){return (a.date||'').localeCompare(b.date||'');});
+  var totalPaid = pays.reduce(function(a,p){return a+(p.amount||0);},0);
+  var remaining = c.totalCost - totalPaid;
+
+  var payRows = pays.length ? pays.map(function(p,i){
+    return '<tr style="background:'+(i%2===0?'var(--b1)':'var(--b2)')+'">'+
+      '<td style="padding:7px 10px;font-size:12px">'+(p.date||'—')+'</td>'+
+      '<td style="padding:7px 10px;font-size:12px">'+(COST_CAT_LABELS[p.category]||p.category||'—')+'</td>'+
+      '<td style="padding:7px 10px;font-size:12px">'+(p.description||'—')+'</td>'+
+      '<td style="padding:7px 10px;font-size:12px;text-align:right;font-weight:600;color:#2a6049">'+fmt(p.amount)+'</td>'+
+    '</tr>';
+  }).join('') : '<tr><td colspan="4" style="padding:16px;text-align:center;color:var(--t2)">Nenhum pagamento registrado</td></tr>';
+
+  var existing = document.getElementById('cont-pay-view-modal');
+  if(existing) existing.remove();
+  var div = document.createElement('div');
+  div.id = 'cont-pay-view-modal';
+  div.className = 'mb';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:300';
+  div.innerHTML = '<div class="mo" style="width:min(620px,96vw);max-height:90vh;overflow-y:auto">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">'+
+      '<h3 style="margin:0">💳 Pagamentos — '+c.name+'</h3>'+
+      '<div style="display:flex;gap:8px">'+
+        '<button class="btn sm p" onclick="printContainerPaymentReport(this.dataset.cid)" data-cid="'+contId+'">🖨 Relatório</button>'+
+        '<button class="btn sm" onclick="document.getElementById(&quot;cont-pay-view-modal&quot;).remove()">Fechar</button>'+
+      '</div>'+
+    '</div>'+
+    '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">'+
+      '<div style="background:var(--b2);border:.5px solid var(--br1);border-radius:var(--r);padding:10px;text-align:center">'+
+        '<div style="font-size:10px;color:var(--t2);margin-bottom:4px">Custo total</div>'+
+        '<div style="font-size:18px;font-weight:700;color:var(--d)">'+fmt(c.totalCost)+'</div>'+
+      '</div>'+
+      '<div style="background:#eaf3de;border:.5px solid #97c459;border-radius:var(--r);padding:10px;text-align:center">'+
+        '<div style="font-size:10px;color:#2a6049;margin-bottom:4px">Total pago</div>'+
+        '<div style="font-size:18px;font-weight:700;color:#2a6049">'+fmt(totalPaid)+'</div>'+
+      '</div>'+
+      '<div style="background:'+(remaining>0?'#fff5f5':'#eaf3de')+';border:.5px solid '+(remaining>0?'#f09595':'#97c459')+';border-radius:var(--r);padding:10px;text-align:center">'+
+        '<div style="font-size:10px;color:'+(remaining>0?'#a32d2d':'#2a6049')+';margin-bottom:4px">'+(remaining>0?'Falta pagar':'✅ Quitado')+'</div>'+
+        '<div style="font-size:18px;font-weight:700;color:'+(remaining>0?'#a32d2d':'#2a6049')+'">'+fmt(Math.abs(remaining))+'</div>'+
+      '</div>'+
+    '</div>'+
+    '<div class="sec">Histórico de pagamentos</div>'+
+    '<div style="border:.5px solid var(--br1);border-radius:var(--r);overflow:hidden">'+
+      '<table style="width:100%;border-collapse:collapse">'+
+        '<thead><tr style="background:var(--b2)">'+
+          '<th style="padding:7px 10px;font-size:11px;color:var(--t2);text-align:left">Data</th>'+
+          '<th style="padding:7px 10px;font-size:11px;color:var(--t2);text-align:left">Categoria</th>'+
+          '<th style="padding:7px 10px;font-size:11px;color:var(--t2);text-align:left">Descrição</th>'+
+          '<th style="padding:7px 10px;font-size:11px;color:var(--t2);text-align:right">Valor</th>'+
+        '</tr></thead>'+
+        '<tbody>'+payRows+'</tbody>'+
+      '</table>'+
+    '</div>'+
   '</div>';
   document.body.appendChild(div);
   div.addEventListener('click',function(e){if(e.target===div)div.remove();});
