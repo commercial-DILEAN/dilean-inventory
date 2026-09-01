@@ -6452,16 +6452,17 @@ function renderMaterialEntries(){
     el.innerHTML = '<div style="font-size:12px;color:var(--t2)">Nenhum fornecedor adicionado ainda.</div>';
     return;
   }
+  var inp = 'padding:7px 10px;border:.5px solid var(--br1);border-radius:var(--r);font-size:13px;background:var(--b1);color:var(--t1)';
   el.innerHTML = materialEntries.map(function(e){
-    return '<div style="display:flex;gap:8px;align-items:center">'+
-      '<input placeholder="Fornecedor" value="'+e.supplier+'" oninput="updateMaterialEntry(this.dataset.eid,\'supplier\',this.value)" data-eid="'+e.id+'" '+
-        'style="flex:1;padding:7px 10px;border:.5px solid var(--br1);border-radius:var(--r);font-size:13px;background:var(--b1);color:var(--t1)">'+
-        'style="flex:1;padding:7px 10px;border:.5px solid var(--br1);border-radius:var(--r);font-size:13px;background:var(--b1);color:var(--t1)">'+
-      '<input type="number" placeholder="Valor $" value="'+e.amount+'" min="0" step="0.01" oninput="updateMaterialEntry(this.dataset.eid,\'amount\',this.value);calcContainerTotal()" data-eid="'+e.id+'" '+
-        'style="width:120px;padding:7px 10px;border:.5px solid var(--br1);border-radius:var(--r);font-size:13px;background:var(--b1);color:var(--t1)">'+
-        'style="width:120px;padding:7px 10px;border:.5px solid var(--br1);border-radius:var(--r);font-size:13px;background:var(--b1);color:var(--t1)">'+
-      '<button class="btn sm dn" onclick="removeMaterialEntry(this.dataset.eid)" data-eid="'+e.id+'" style="flex-shrink:0">✕</button>'+
-    '</div>';
+    return '<div style="display:flex;gap:8px;align-items:center;margin-bottom:4px">'
+      +'<input placeholder="Fornecedor" value="'+e.supplier+'" data-eid="'+e.id+'" data-field="supplier"'
+      +' oninput="updateMaterialEntry(this.dataset.eid,this.dataset.field,this.value)"'
+      +' style="flex:1;'+inp+'">'
+      +'<input type="number" placeholder="Valor $" value="'+e.amount+'" data-eid="'+e.id+'" data-field="amount"'
+      +' oninput="updateMaterialEntry(this.dataset.eid,this.dataset.field,this.value);calcContainerTotal()"'
+      +' style="width:130px;'+inp+'">'
+      +'<button class="btn sm dn" data-eid="'+e.id+'" onclick="removeMaterialEntry(this.dataset.eid)" style="flex-shrink:0">✕</button>'
+      +'</div>';
   }).join('');
 }
 
