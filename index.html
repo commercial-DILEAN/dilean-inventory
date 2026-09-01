@@ -998,12 +998,14 @@ async function init(){
   try{
     var r=await fetch(SB+'/rest/v1/slabs?limit=1',{headers:H});
     if(r.status===404||r.status===400||r.status===401){showSetup();return;}
+    var safe=function(p){return p.catch(function(e){console.warn('Load error:',e);return[];});};
     var [sd,id,td,pfd,pld,set]=await Promise.all([
-      sbGNoPhoto('slabs'),sbG('invoices'),
-      sbG('transfers').catch(function(){return[];}),
-      sbG('proformas').catch(function(){return[];}),
-      sbG('packing_lists').catch(function(){return[];}),
-      fetch(SB+'/rest/v1/settings',{headers:H}).then(function(r){return r.json();})
+      safe(sbGNoPhoto('slabs')),
+      safe(sbG('invoices')),
+      safe(sbG('transfers')),
+      safe(sbG('proformas')),
+      safe(sbG('packing_lists')),
+      fetch(SB+'/rest/v1/settings',{headers:H}).then(function(r){return r.json();}).catch(function(){return[];})
     ]);
     slabs=sd||[];invoices=id||[];transfers=td||[];
     proformas=pfd||[];packingLists=pld||[];
@@ -6034,8 +6036,8 @@ function openIMReadonly(invId){
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">'+
       '<h3 style="margin:0">📄 '+inv.num+'</h3>'+
       '<div style="display:flex;gap:8px">'+
-        '<button class="btn sm p" onclick="prevInv(''+invId+'')">🖨 Imprimir</button>'+
-        '<button class="btn sm" onclick="document.getElementById('inv-readonly-modal').remove()">Fechar</button>'+
+        '<button class="btn sm p" onclick="prevInv(this.dataset.id)" data-id="'+invId+'">🖨 Imprimir</button>'+
+        '<button class="btn sm" onclick="document.getElementById(&quot;inv-readonly-modal&quot;).remove()">Fechar</button>'+
       '</div>'+
     '</div>'+
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;font-size:12px">'+
