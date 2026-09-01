@@ -142,9 +142,31 @@ table tr:hover td{background:var(--b2);}
 .setup{max-width:620px;margin:32px auto;padding:20px;}
 .setup pre{background:var(--b2);border-radius:var(--r);padding:12px;font-size:11px;white-space:pre-wrap;max-height:280px;overflow-y:auto;border:.5px solid var(--br1);margin-bottom:12px;}
 @media(max-width:500px){.fg{grid-template-columns:1fr;}}
+
+/* READ-ONLY MODE */
+body.readonly .btn.p,
+body.readonly .btn.dn,
+body.readonly .btn[onclick*="open"],
+body.readonly .btn[onclick*="save"],
+body.readonly .btn[onclick*="add"],
+body.readonly .btn[onclick*="delete"],
+body.readonly .btn[onclick*="register"],
+body.readonly .btn[onclick*="novo"],
+body.readonly .btn[onclick*="nova"],
+body.readonly .btn[onclick*="novo"],
+body.readonly .btn[onclick*="New"],
+body.readonly input:not([disabled]),
+body.readonly textarea:not([disabled]),
+body.readonly select:not([disabled]) { pointer-events:none; }
+body.readonly .btn.p { opacity:0.3; cursor:not-allowed; }
+body.readonly .btn.dn { opacity:0.3; cursor:not-allowed; }
+body.readonly .readonly-hide { display:none !important; }
 </style>
 </head>
 <body>
+<div id="readonly-banner" style="display:none;background:#185fa5;color:#fff;text-align:center;padding:8px 16px;font-size:13px;font-weight:600;position:sticky;top:0;z-index:9999;letter-spacing:.03em">
+  👁 MODO VISUALIZAÇÃO — Acesso somente leitura. Nenhuma alteração pode ser feita.
+</div>
 <div class="app">
   <div class="topbar">
     <div class="logo">🪨 Dilean Marbles — Inventory</div>
@@ -188,7 +210,7 @@ table tr:hover td{background:var(--b2);}
           <option value="available">Disponível</option><option value="sold">Vendida</option>
           <option value="reserved">Reservada</option><option value="consigned">Consignada</option>
         </select>
-        <button class="btn p" onclick="openSM()">+ Nova Chapa</button>
+        <button class="btn p readonly-hide" onclick="openSM()">+ Nova Chapa</button>
         <div style="display:flex;gap:6px;align-items:center">
           <select id="report-status-filter" style="padding:5px 8px;border:.5px solid var(--br1);border-radius:var(--r);font-size:12px;background:var(--b1);color:var(--t1)">
             <option value="">Todos os status</option>
@@ -227,9 +249,9 @@ table tr:hover td{background:var(--b2);}
       <div class="tb">
         <select id="ifl" onchange="renderInvoices()"><option value="">Todos os clientes</option></select>
         <select id="ifs" onchange="renderInvoices()"><option value="">Todos</option><option value="paid">Pago</option><option value="partial">Parcial</option><option value="pending">Pendente</option></select>
-        <button class="btn p" onclick="openIM()">+ Nova Invoice</button>
-        <button class="btn" onclick="openClientPaymentModal()" style="border-color:var(--a);color:var(--a)">💰 Registrar pagamento do cliente</button>
-        <button class="btn" onclick="openStandaloneProforma()" style="border-color:#6b3fa0;color:#6b3fa0">🗒 Nova Proforma</button>
+        <button class="btn p readonly-hide" onclick="openIM()">+ Nova Invoice</button>
+        <button class="btn readonly-hide" onclick="openClientPaymentModal()" style="border-color:var(--a);color:var(--a)">💰 Registrar pagamento do cliente</button>
+        <button class="btn readonly-hide" onclick="openStandaloneProforma()" style="border-color:#6b3fa0;color:#6b3fa0">🗒 Nova Proforma</button>
       </div>
       <div id="il"></div>
     </div>
@@ -283,7 +305,7 @@ table tr:hover td{background:var(--b2);}
             <option value="">Todos os containers</option>
           </select>
           <button class="btn" onclick="printContainerReport()" style="border-color:#1a5c3a;color:#1a5c3a">🖨 Relatório</button>
-          <button class="btn p" onclick="openContainerModal()">+ Novo Container</button>
+          <button class="btn p readonly-hide" onclick="openContainerModal()">+ Novo Container</button>
         </div>
       </div>
       <div id="containers-list"></div>
@@ -306,7 +328,7 @@ table tr:hover td{background:var(--b2);}
           <div style="display:flex;gap:8px;align-items:center">
             <input type="number" id="fin-balance" placeholder="0.00" step="0.01"
               style="flex:1;padding:8px 12px;border:.5px solid var(--br2);border-radius:var(--r);font-size:18px;font-weight:600;background:var(--b1);color:var(--t1)">
-            <button class="btn p" onclick="saveFinBalance()">Salvar</button>
+            <button class="btn p readonly-hide" onclick="saveFinBalance()">Salvar</button>
           </div>
           <div style="font-size:11px;color:var(--t2);margin-top:6px" id="fin-balance-updated"></div>
         </div>
@@ -422,8 +444,8 @@ table tr:hover td{background:var(--b2);}
           <div style="font-size:12px;color:var(--t2)">Gere o documento de transferência de material para consignação</div>
         </div>
         <div style="display:flex;gap:10px;flex-wrap:wrap">
-          <button class="btn p" onclick="printTransfer()" style="min-width:140px;padding:8px 16px">🖨 Gerar Transfer</button>
-          <button class="btn" onclick="genPackingList()" style="border-color:#185fa5;color:#185fa5;min-width:140px;padding:8px 16px">📦 Packing List</button>
+          <button class="btn p readonly-hide" onclick="printTransfer()" style="min-width:140px;padding:8px 16px">🖨 Gerar Transfer</button>
+          <button class="btn readonly-hide" onclick="genPackingList()" style="border-color:#185fa5;color:#185fa5;min-width:140px;padding:8px 16px">📦 Packing List</button>
         </div>
       </div>
       <div class="sec">Transfers gerados</div>
@@ -514,7 +536,7 @@ table tr:hover td{background:var(--b2);}
         <div class="fi"><label>Endereço do banco</label><input id="cfg-bankaddr" placeholder="555 California St., San Francisco, CA 94104"></div>
       </div>
       <div style="margin-top:16px">
-        <button class="btn p" onclick="saveSettings()">Salvar configurações</button>
+        <button class="btn p readonly-hide" onclick="saveSettings()">Salvar configurações</button>
         <span id="cfg-saved" style="font-size:12px;color:var(--a);margin-left:10px;display:none">✓ Salvo!</span>
       </div>
       <div class="sec" style="margin-top:24px">Locais cadastrados</div>
@@ -905,6 +927,9 @@ table tr:hover td{background:var(--b2);}
 </div>
 
 <script>
+// ── READ-ONLY MODE ───────────────────────────────────
+var READONLY = new URLSearchParams(window.location.search).get('readonly')==='1';
+
 var SB='https://plsgcaiqmltljytchvvt.supabase.co';
 var SK='sb_publishable_QexQ4PIBOved8ajDR42xqQ_UbzeLhYL';
 var H={'Content-Type':'application/json','apikey':SK,'Authorization':'Bearer '+SK,'Prefer':'return=representation'};
@@ -1011,8 +1036,19 @@ async function init(){
     sync('ok','Sincronizado '+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}));
     document.getElementById('loading-screen').classList.add('hidden');
     document.getElementById('page-inventory').classList.remove('hidden');
-    rebuildSels();renderStats();renderTable();loadSettingsForm();renderAlerts();
+    rebuildSels();renderStats();renderTable();
+    if(READONLY)applyReadonlyToRendered();loadSettingsForm();renderAlerts();
     renderProformasList();renderPackingListsList();
+    if(READONLY){
+      document.body.classList.add('readonly');
+      document.getElementById('readonly-banner').style.display='block';
+      // Hide all action buttons in card renders
+      document.querySelectorAll('.btn.p, .btn.dn').forEach(function(b){
+        if(!b.classList.contains('nav-btn')&&!b.textContent.includes('🖨')&&!b.textContent.includes('📊')){
+          b.classList.add('readonly-hide');
+        }
+      });
+    }
   }catch(e){
     if(e.message&&e.message.includes('does not exist')){showSetup();return;}
     sync('err','Erro de conexão');
@@ -1207,6 +1243,14 @@ function calcStats(){
     profit=svv-totalCost;
   return{total:t,avail:av,sold:so,inv:iv,soldV:svv,ar:ar,billed:billed,received:received,cost:totalCost,profit:profit};
 }
+function applyReadonlyToRendered(){
+  if(!READONLY)return;
+  document.querySelectorAll('.btn.p, .btn.dn').forEach(function(b){
+    if(!b.classList.contains('nav-btn') && !b.textContent.includes('🖨') && !b.textContent.includes('📊') && !b.textContent.includes('📋') && !b.textContent.includes('Relatório')){
+      b.style.display='none';
+    }
+  });
+}
 function renderStats(){
   var s=calcStats();
   document.getElementById('sr').innerHTML=
@@ -1326,7 +1370,7 @@ function handlePhoto(e){
     document.getElementById('pp').src=curPhoto;document.getElementById('pp').style.display='block';document.getElementById('pl').style.display='none';
   };img.src=URL.createObjectURL(file);
 }
-function openSM(id){
+function openSM(id){if(READONLY)return;
   editId=id||null;var s=id?slabs.find(function(x){return x.id===id;}):null;
   curPhoto=s?s.photo:null;
   document.getElementById('smt').textContent=s?'Editar Chapa':'Nova Chapa';
@@ -1343,7 +1387,7 @@ function openSM(id){
   else{document.getElementById('pp').style.display='none';document.getElementById('pl').style.display='block';}
   document.getElementById('sm').classList.remove('hidden');
 }
-async function saveSlab(){
+async function saveSlab(){if(READONLY)return;
   var lot=document.getElementById('fl2').value.trim(),num=document.getElementById('fn').value.trim(),mat=document.getElementById('fmat').value.trim();
   if(!lot||!num||!mat){alert('Lote, número e material são obrigatórios.');return;}
   var btn=document.getElementById('ssb');btn.textContent='Salvando...';btn.disabled=true;
@@ -1576,12 +1620,13 @@ async function savePayment(invId){
     await sbU('invoices',invId,{paid:inv.paid,status:inv.status,payment_history:history});
     sync('ok','Salvo');
     var modal=document.getElementById('pay-modal');if(modal)modal.remove();
-    renderInvoices();renderStats();renderTable();
+    renderInvoices();
+    if(READONLY)applyReadonlyToRendered();renderStats();renderTable();
     if(!document.getElementById('page-report').classList.contains('hidden'))renderReport();
   }catch(e){sync('err','Erro');alert(e.message);}
 }
 
-async function delInv(id){
+async function delInv(id){if(READONLY)return;
   var inv=invoices.find(function(i){return i.id===id;});
   if(!inv)return;
   if(!confirm('Excluir invoice '+inv.num+'?\n\nAs chapas serão revertidas para Disponível ou Consignada automaticamente.'))return;
@@ -1610,7 +1655,7 @@ async function delInv(id){
 }
 
 // ── INVOICE MODAL (criar + editar) ────────────────────
-function openIM(invId){
+function openIM(invId){if(READONLY)return;
   editInvId=invId||null;
   var inv=invId?invoices.find(function(i){return i.id===invId;}):null;
   selIds=inv?inv.slab_ids||[]:[];
@@ -1694,7 +1739,7 @@ function uIT(){
 }
 function getEIs(){var items=[];for(var i=1;i<=eic;i++){var d=document.getElementById('eid-'+i);if(!d)continue;items.push({desc:d.value,qty:parseFloat(document.getElementById('eiq-'+i).value)||1,unit:parseFloat(document.getElementById('eiu-'+i).value)||0,amt:parseFloat(document.getElementById('eia-'+i).value)||0});}return items;}
 
-async function saveInv(){
+async function saveInv(){if(READONLY)return;
   var num=document.getElementById('inum').value.trim(),client=document.getElementById('icli').value.trim();
   if(!num||!client){alert('Número e cliente são obrigatórios.');return;}
 
@@ -2958,7 +3003,7 @@ function renderTransferPreview(){
   document.getElementById('tr-preview').innerHTML = html;
 }
 
-async function printTransfer(){
+async function printTransfer(){if(READONLY)return;if(READONLY)return;
   var data = buildTransferRows();
   if(!data.total){alert('Selecione pelo menos uma chapa.');return;}
 
@@ -3871,7 +3916,7 @@ function calcContainerTotal(){
   if(el)el.textContent=fmt(total);
 }
 
-function openContainerModal(id){
+function openContainerModal(id){if(READONLY)return;
   editContId=id||null;
   var c=id?containers.find(function(x){return x.id===id;}):null;
   document.getElementById('container-modal-title').textContent=c?'Editar Container':'Novo Container';
@@ -3918,9 +3963,11 @@ async function saveContainer(){
   closeM('container-modal');
   rebuildContainerSel();
   renderContainers();
+    if(READONLY)applyReadonlyToRendered();
 }
 
-async function deleteContainer(id){
+async function deleteContainer(id){if(READONLY)return;
+  // id){
   if(!confirm('Excluir este container? As chapas vinculadas perderão o vínculo.'))return;
   containers=containers.filter(function(x){return x.id!==id;});
   // Remove container_id from linked slabs
@@ -3999,7 +4046,7 @@ function renderContainers(){
       '<div style="font-size:40px;margin-bottom:12px">📦</div>'+
       '<div style="font-size:15px;font-weight:500;margin-bottom:8px">Nenhum container cadastrado</div>'+
       '<div style="font-size:13px;margin-bottom:16px">Cadastre seus containers para rastrear custos e lucro por lote importado</div>'+
-      '<button class="btn p" onclick="openContainerModal()">+ Cadastrar primeiro container</button>'+
+      '<button class="btn p readonly-hide" onclick="openContainerModal()">+ Cadastrar primeiro container</button>'+
       '</div>';
     return;
   }
@@ -4145,6 +4192,16 @@ function renderContainers(){
       costRows+
       '<div style="display:flex;justify-content:space-between;font-size:12px;font-weight:600;padding-top:6px;border-top:.5px solid var(--br1);margin-top:4px">'+
       '<span>Total</span><span style="color:var(--d)">'+fmt(c.totalCost)+'</span></div>'+
+      (function(){
+        var pays = c.payments||[];
+        var totalPaid = pays.reduce(function(a,p){return a+p.amount;},0);
+        var remaining = c.totalCost - totalPaid;
+        if(!pays.length) return '<div style="margin-top:8px;font-size:11px;color:var(--t2)">Nenhum pagamento registrado ainda</div>';
+        return '<div style="margin-top:8px;border-top:.5px solid var(--br1);padding-top:8px">'+
+          '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px"><span style="color:var(--t2)">✅ Total pago</span><span style="color:#2a6049;font-weight:600">'+fmt(totalPaid)+'</span></div>'+
+          '<div style="display:flex;justify-content:space-between;font-size:11px"><span style="color:var(--t2)">'+(remaining>0?'⏳ Falta pagar':'✅ Quitado')+'</span><span style="color:'+(remaining>0?'#a32d2d':'#2a6049')+';font-weight:600">'+fmt(Math.abs(remaining))+'</span></div>'+
+          (remaining>0?'<div style="margin-top:6px;height:6px;background:var(--b3);border-radius:3px;overflow:hidden"><div style="height:100%;background:#2a6049;width:'+Math.min(100,(totalPaid/c.totalCost*100)).toFixed(0)+'%;border-radius:3px"></div></div>':'');
+      })()+
       '</div>'+
       '<div>'+
       '<div style="font-size:11px;font-weight:600;color:var(--t2);text-transform:uppercase;margin-bottom:8px">Resumo das chapas</div>'+
@@ -5682,6 +5739,279 @@ function packingFromProforma(proformaId){
     date: p.date||new Date().toISOString().slice(0,10),
     consignee: p.to_name||''
   });
+}
+
+// ══════════════════════════════════════════════════════
+// CONTAINER PAYMENTS — HISTÓRICO DE PAGAMENTOS
+// ══════════════════════════════════════════════════════
+var COST_CAT_LABELS = {
+  material:'💰 Material', freight:'🚢 Frete internacional',
+  importDuty:'🏛 Importação/Imposto', broker:'🤝 Broker/Despachante',
+  delivery:'🚛 Frete interno', other:'📌 Outros'
+};
+
+function openContainerPayments(contId){if(READONLY){alert('Modo visualização — sem permissão para registrar pagamentos.');return;}
+  var c = containers.find(function(x){return x.id===contId;});
+  if(!c)return;
+
+  var existing = document.getElementById('cont-pay-modal');
+  if(existing) existing.remove();
+
+  var pays = c.payments||[];
+  var totalPaid = pays.reduce(function(a,p){return a+p.amount;},0);
+  var remaining = c.totalCost - totalPaid;
+
+  // Build payment history rows
+  var histRows = '';
+  if(pays.length){
+    var sorted = pays.slice().sort(function(a,b){return (a.date||'').localeCompare(b.date||'');});
+    sorted.forEach(function(p,i){
+      var bg = i%2===0?'var(--b1)':'var(--b2)';
+      histRows += '<tr style="background:'+bg+'">'+
+        '<td style="padding:7px 10px;font-size:12px">'+(p.date||'—')+'</td>'+
+        '<td style="padding:7px 10px;font-size:12px">'+(COST_CAT_LABELS[p.category]||p.category||'—')+'</td>'+
+        '<td style="padding:7px 10px;font-size:12px">'+(p.description||'—')+'</td>'+
+        '<td style="padding:7px 10px;font-size:12px;text-align:right;font-weight:600;color:#2a6049">'+fmt(p.amount)+'</td>'+
+        '<td style="padding:7px 10px;text-align:center">'+
+          '<button class="btn sm dn" onclick="deleteContainerPayment(this.dataset.cid,this.dataset.pid)" data-cid="'+contId+'" data-pid="'+p.id+'" style="font-size:10px">✕</button>'+
+        '</td>'+
+        '</tr>';
+    });
+  } else {
+    histRows = '<tr><td colspan="5" style="padding:16px;text-align:center;color:var(--t2);font-size:12px">Nenhum pagamento registrado ainda</td></tr>';
+  }
+
+  // Build cost breakdown with paid status
+  var costBreakdown = '';
+  var costs = c.costs||{};
+  Object.keys(costs).forEach(function(k){
+    if(!costs[k])return;
+    var paidForCat = pays.filter(function(p){return p.category===k;}).reduce(function(a,p){return a+p.amount;},0);
+    var pct = Math.min(100,(paidForCat/costs[k]*100));
+    costBreakdown += '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:.5px solid var(--br1)">'+
+      '<div>'+
+        '<div style="font-size:12px">'+(COST_CAT_LABELS[k]||k)+'</div>'+
+        '<div style="font-size:11px;color:var(--t2)">Orçado: '+fmt(costs[k])+'</div>'+
+      '</div>'+
+      '<div style="text-align:right">'+
+        '<div style="font-size:12px;font-weight:600;color:'+(paidForCat>=costs[k]?'#2a6049':'#a32d2d')+'">'+fmt(paidForCat)+' pago</div>'+
+        '<div style="font-size:11px;color:var(--t2)">'+(costs[k]-paidForCat>0?'Falta: '+fmt(costs[k]-paidForCat):'✅ Quitado')+'</div>'+
+      '</div>'+
+      '</div>'+
+      '<div style="height:4px;background:var(--b3);border-radius:2px;margin:4px 0 6px;overflow:hidden">'+
+        '<div style="height:100%;background:'+(pct>=100?'#2a6049':'#f5a623')+';width:'+pct+'%;border-radius:2px"></div>'+
+      '</div>';
+  });
+
+  var div = document.createElement('div');
+  div.id = 'cont-pay-modal';
+  div.className = 'mb';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:300';
+  div.innerHTML = '<div class="mo" style="width:min(680px,96vw);max-height:92vh;overflow-y:auto">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">'+
+      '<h3 style="margin:0">💳 Pagamentos — '+c.name+'</h3>'+
+    '<button class="btn sm" onclick="printContainerPaymentReport(this.dataset.id)" data-id="'+contId+'" >🖨 Relatório</button>'+
+    '</div>'+
+
+    // Summary cards
+    '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">'+
+      '<div style="background:var(--b2);border:.5px solid var(--br1);border-radius:var(--r);padding:10px;text-align:center">'+
+        '<div style="font-size:10px;color:var(--t2);text-transform:uppercase;margin-bottom:4px">Custo total</div>'+
+        '<div style="font-size:18px;font-weight:700;color:var(--d)">'+fmt(c.totalCost)+'</div>'+
+      '</div>'+
+      '<div style="background:#eaf3de;border:.5px solid #97c459;border-radius:var(--r);padding:10px;text-align:center">'+
+        '<div style="font-size:10px;color:#2a6049;text-transform:uppercase;margin-bottom:4px">Total pago</div>'+
+        '<div style="font-size:18px;font-weight:700;color:#2a6049">'+fmt(totalPaid)+'</div>'+
+      '</div>'+
+      '<div style="background:'+(remaining>0?'#fff5f5':'#eaf3de')+';border:.5px solid '+(remaining>0?'#f09595':'#97c459')+';border-radius:var(--r);padding:10px;text-align:center">'+
+        '<div style="font-size:10px;color:'+(remaining>0?'#a32d2d':'#2a6049')+';text-transform:uppercase;margin-bottom:4px">'+(remaining>0?'Falta pagar':'Quitado!')+'</div>'+
+        '<div style="font-size:18px;font-weight:700;color:'+(remaining>0?'#a32d2d':'#2a6049')+'">'+fmt(Math.abs(remaining))+'</div>'+
+      '</div>'+
+    '</div>'+
+
+    // Cost breakdown with paid status
+    '<div class="sec">Status por categoria</div>'+
+    '<div style="margin-bottom:14px">'+costBreakdown+'</div>'+
+
+    // Payment history
+    '<div class="sec">Histórico de pagamentos</div>'+
+    '<div style="border:.5px solid var(--br1);border-radius:var(--r);overflow:hidden;margin-bottom:14px">'+
+      '<table style="width:100%;border-collapse:collapse">'+
+        '<thead><tr style="background:var(--b2)">'+
+          '<th style="padding:7px 10px;text-align:left;font-size:11px;color:var(--t2)">Data</th>'+
+          '<th style="padding:7px 10px;text-align:left;font-size:11px;color:var(--t2)">Categoria</th>'+
+          '<th style="padding:7px 10px;text-align:left;font-size:11px;color:var(--t2)">Descrição</th>'+
+          '<th style="padding:7px 10px;text-align:right;font-size:11px;color:var(--t2)">Valor</th>'+
+          '<th style="padding:7px 10px;width:40px"></th>'+
+        '</tr></thead>'+
+        '<tbody>'+histRows+'</tbody>'+
+      '</table>'+
+    '</div>'+
+
+    // Add new payment form
+    '<div class="sec">Registrar pagamento</div>'+
+    '<div class="fg">'+
+      '<div class="fi"><label>Data *</label><input id="cpay-date" type="date" value="'+new Date().toISOString().slice(0,10)+'"></div>'+
+      '<div class="fi"><label>Valor ($) *</label><input id="cpay-amount" type="number" min="0" step="0.01" placeholder="0.00"></div>'+
+      '<div class="fi"><label>Categoria</label>'+
+        '<select id="cpay-cat" style="padding:7px 10px;border:.5px solid var(--br1);border-radius:var(--r);font-size:13px;background:var(--b1);color:var(--t1)">'+
+          Object.keys(costs).filter(function(k){return costs[k]>0;}).map(function(k){
+            return '<option value="'+k+'">'+(COST_CAT_LABELS[k]||k)+'</option>';
+          }).join('')+
+          '<option value="other">📌 Outros</option>'+
+        '</select>'+
+      '</div>'+
+      '<div class="fi"><label>Descrição</label><input id="cpay-desc" placeholder="ex: 1ª parcela material, frete pago..."></div>'+
+    '</div>'+
+    '<div class="ma">'+
+      '<button class="btn" onclick="document.getElementById(&quot;cont-pay-modal&quot;).remove()">Fechar</button>'+
+      '<button class="btn p" onclick="saveContainerPayment(this.dataset.id)" data-id="'+contId+'">💳 Salvar pagamento</button>'+
+    '</div>'+
+  '</div>';
+
+  document.body.appendChild(div);
+  div.addEventListener('click',function(e){if(e.target===div)div.remove();});
+}
+
+async function saveContainerPayment(btn){
+  var contId = btn.dataset?btn.dataset.id:btn;
+  var c = containers.find(function(x){return x.id===contId;});
+  if(!c)return;
+  var amount = parseFloat(document.getElementById('cpay-amount').value)||0;
+  var date = document.getElementById('cpay-date').value;
+  var cat = document.getElementById('cpay-cat').value;
+  var desc = document.getElementById('cpay-desc').value.trim();
+  if(!amount||!date){alert('Informe o valor e a data.');return;}
+
+  var pays = Array.isArray(c.payments)?c.payments:[];
+  pays.push({id:uid(), date:date, amount:amount, category:cat, description:desc, registered:new Date().toISOString()});
+  c.payments = pays;
+
+  sync('spin','Salvando...');
+  try{
+    await saveSetting('containers', containers);
+    sync('ok','Salvo!');
+    document.getElementById('cont-pay-modal').remove();
+    renderContainers();
+    // Reopen to show updated state
+    openContainerPayments(contId);
+  }catch(e){sync('err','Erro');alert(e.message);}
+}
+
+async function deleteContainerPayment(btn){
+  var contId = btn.dataset.cid;
+  var payId = btn.dataset.pid;
+  if(!confirm('Excluir este pagamento?'))return;
+  var c = containers.find(function(x){return x.id===contId;});
+  if(!c)return;
+  c.payments = (c.payments||[]).filter(function(p){return p.id!==payId;});
+  sync('spin','Removendo...');
+  try{
+    await saveSetting('containers', containers);
+    sync('ok','Removido!');
+    document.getElementById('cont-pay-modal').remove();
+    renderContainers();
+    openContainerPayments(contId);
+  }catch(e){sync('err','Erro');alert(e.message);}
+}
+
+function printContainerPaymentReport(contId){
+  var c = containers.find(function(x){return x.id===contId;});
+  if(!c)return;
+  var pays = (c.payments||[]).slice().sort(function(a,b){return (a.date||'').localeCompare(b.date||'');});
+  var totalPaid = pays.reduce(function(a,p){return a+p.amount;},0);
+  var remaining = c.totalCost - totalPaid;
+  var now = new Date();
+  var costs = c.costs||{};
+
+  // Cost breakdown rows
+  var catRows = Object.keys(costs).filter(function(k){return costs[k]>0;}).map(function(k){
+    var paidCat = pays.filter(function(p){return p.category===k;}).reduce(function(a,p){return a+p.amount;},0);
+    var pct = c.totalCost>0?(paidCat/costs[k]*100).toFixed(0):'0';
+    return '<tr style="background:'+(paidCat>=costs[k]?'#eaf3de':'#fff')+'">'+
+      '<td style="padding:7px 12px;font-size:12px">'+(COST_CAT_LABELS[k]||k)+'</td>'+
+      '<td style="padding:7px 12px;font-size:12px;text-align:right;color:#a32d2d">'+fmt(costs[k])+'</td>'+
+      '<td style="padding:7px 12px;font-size:12px;text-align:right;color:#2a6049;font-weight:600">'+fmt(paidCat)+'</td>'+
+      '<td style="padding:7px 12px;font-size:12px;text-align:right;color:'+(costs[k]-paidCat>0?'#a32d2d':'#2a6049')+'">'+fmt(costs[k]-paidCat)+'</td>'+
+      '<td style="padding:7px 12px;font-size:12px;text-align:center;font-weight:600;color:'+(paidCat>=costs[k]?'#2a6049':'#854f0b')+'">'+pct+'%</td>'+
+      '</tr>';
+  }).join('');
+
+  // Payment history rows
+  var payRows = pays.map(function(p,i){
+    var bg = i%2===0?'#fff':'#f9faf9';
+    return '<tr style="background:'+bg+'">'+
+      '<td style="padding:6px 12px;font-size:11px">'+(p.date||'—')+'</td>'+
+      '<td style="padding:6px 12px;font-size:11px">'+(COST_CAT_LABELS[p.category]||p.category||'—')+'</td>'+
+      '<td style="padding:6px 12px;font-size:11px">'+(p.description||'—')+'</td>'+
+      '<td style="padding:6px 12px;font-size:11px;text-align:right;font-weight:600;color:#2a6049">'+fmt(p.amount)+'</td>'+
+      '</tr>';
+  }).join('');
+
+  var html = '<div style="font-family:Arial,sans-serif;color:#000;padding:28px;max-width:820px">'+
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:12px;border-bottom:3px solid #185fa5;margin-bottom:16px">'+
+      '<div><div style="font-size:20px;font-weight:700;color:#185fa5">DILEAN MARBLES CORP</div>'+
+      '<div style="font-size:11px;color:#666;margin-top:3px">1661 E Sample Rd, Pompano Beach FL 33064</div></div>'+
+      '<div style="text-align:right">'+
+        '<div style="font-size:18px;font-weight:700;color:#185fa5">CONTAINER PAYMENTS</div>'+
+        '<div style="font-size:14px;font-weight:600;margin-top:3px">'+c.name+'</div>'+
+        '<div style="font-size:11px;color:#666">'+now.toLocaleDateString('en-US')+'</div>'+
+      '</div>'+
+    '</div>'+
+
+    '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">'+
+      '<div style="background:#f0f7f3;border:1px solid #cde3d6;border-radius:6px;padding:12px;text-align:center">'+
+        '<div style="font-size:10px;font-weight:700;color:#2a6049;text-transform:uppercase;margin-bottom:4px">Custo total</div>'+
+        '<div style="font-size:20px;font-weight:700;color:#a32d2d">'+fmt(c.totalCost)+'</div>'+
+      '</div>'+
+      '<div style="background:#f0f7f3;border:1px solid #97c459;border-radius:6px;padding:12px;text-align:center">'+
+        '<div style="font-size:10px;font-weight:700;color:#2a6049;text-transform:uppercase;margin-bottom:4px">Total pago</div>'+
+        '<div style="font-size:20px;font-weight:700;color:#2a6049">'+fmt(totalPaid)+'</div>'+
+      '</div>'+
+      '<div style="background:'+(remaining>0?'#fff3f3':'#f0f7f3')+';border:1px solid '+(remaining>0?'#f09595':'#97c459')+';border-radius:6px;padding:12px;text-align:center">'+
+        '<div style="font-size:10px;font-weight:700;color:'+(remaining>0?'#a32d2d':'#2a6049')+';text-transform:uppercase;margin-bottom:4px">'+(remaining>0?'Falta pagar':'Quitado!')+'</div>'+
+        '<div style="font-size:20px;font-weight:700;color:'+(remaining>0?'#a32d2d':'#2a6049')+'">'+fmt(Math.abs(remaining))+'</div>'+
+      '</div>'+
+    '</div>'+
+
+    '<div style="font-size:12px;font-weight:700;color:#185fa5;padding:8px 0;border-bottom:2px solid #185fa5;margin-bottom:8px;text-transform:uppercase">Status por categoria</div>'+
+    '<table style="width:100%;border-collapse:collapse;margin-bottom:20px">'+
+      '<thead><tr style="background:#185fa5;color:#fff">'+
+        '<th style="padding:7px 12px;text-align:left">Categoria</th>'+
+        '<th style="padding:7px 12px;text-align:right">Orçado</th>'+
+        '<th style="padding:7px 12px;text-align:right">Pago</th>'+
+        '<th style="padding:7px 12px;text-align:right">Falta</th>'+
+        '<th style="padding:7px 12px;text-align:center">%</th>'+
+      '</tr></thead><tbody>'+catRows+'</tbody>'+
+      '<tr style="background:#185fa5;color:#fff;font-weight:700">'+
+        '<td style="padding:7px 12px">TOTAL</td>'+
+        '<td style="padding:7px 12px;text-align:right">'+fmt(c.totalCost)+'</td>'+
+        '<td style="padding:7px 12px;text-align:right">'+fmt(totalPaid)+'</td>'+
+        '<td style="padding:7px 12px;text-align:right">'+fmt(remaining)+'</td>'+
+        '<td style="padding:7px 12px;text-align:center">'+(c.totalCost>0?(totalPaid/c.totalCost*100).toFixed(0):0)+'%</td>'+
+      '</tr>'+
+    '</table>'+
+
+    (pays.length?
+    '<div style="font-size:12px;font-weight:700;color:#185fa5;padding:8px 0;border-bottom:2px solid #185fa5;margin-bottom:8px;text-transform:uppercase">Histórico de pagamentos</div>'+
+    '<table style="width:100%;border-collapse:collapse;margin-bottom:20px">'+
+      '<thead><tr style="background:#185fa5;color:#fff">'+
+        '<th style="padding:6px 12px;text-align:left;width:100px">Data</th>'+
+        '<th style="padding:6px 12px;text-align:left">Categoria</th>'+
+        '<th style="padding:6px 12px;text-align:left">Descrição</th>'+
+        '<th style="padding:6px 12px;text-align:right">Valor</th>'+
+      '</tr></thead><tbody>'+payRows+
+      '<tr style="background:#e8f1fb;font-weight:700;border-top:2px solid #185fa5">'+
+        '<td colspan="3" style="padding:7px 12px">Total</td>'+
+        '<td style="padding:7px 12px;text-align:right;color:#2a6049">'+fmt(totalPaid)+'</td>'+
+      '</tr></tbody></table>':'') +
+
+    '<div style="text-align:center;font-size:10px;color:#aaa;border-top:1px solid #eee;padding-top:8px">'+
+      'DILEAN MARBLES CORP · Container Payments · '+c.name+' · '+now.toLocaleDateString('en-US')+
+    '</div></div>';
+
+  document.getElementById('print-area').innerHTML = html;
+  window.print();
 }
 
 function closeM(id){document.getElementById(id).classList.add('hidden');}
