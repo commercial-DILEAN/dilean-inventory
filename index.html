@@ -882,7 +882,7 @@ body.readonly .mo select { pointer-events:none !important; opacity:0.7; }
     <div id="clipay-invoices-section" class="hidden">
       <div class="sec" style="display:flex;justify-content:space-between;align-items:center">
         <span>Invoices em aberto — distribua o pagamento</span>
-        <button class="btn sm p" onclick="autoDistribute()">⚡ Distribuir automaticamente</button>
+        <button class="btn sm p readonly-hide" onclick="autoDistribute()">⚡ Distribuir automaticamente</button>
       </div>
       <div style="border:.5px solid var(--br1);border-radius:var(--rl);overflow:hidden;margin-bottom:10px">
         <table style="width:100%;border-collapse:collapse;font-size:12px">
@@ -1514,13 +1514,13 @@ function renderInvoices(){
       '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">'+
       '<button class="btn sm p" onclick="prevInv(\''+inv.id+'\')">🖨 Invoice</button>'+
       '<button class="btn sm wn readonly-hide" onclick="editInv(\''+inv.id+'\')">✏ Editar</button>'+
-        '<button class="btn sm" style="margin-top:4px;border-color:#a32d2d;color:#a32d2d" onclick="regP(this.dataset.id)" data-id="'+inv.id+'">Registrar pagamento</button>'+
+        '<button class="btn sm readonly-hide" style="margin-top:4px;border-color:#a32d2d;color:#a32d2d" onclick="regP(this.dataset.id)" data-id="'+inv.id+'">Registrar pagamento</button>'+
         '<button class="btn sm" onclick="openClientLedger(this.dataset.id)" data-id="'+inv.id+'">📋 Extrato</button>'+
       '<button class="btn sm dn readonly-hide" onclick="delInv(\''+inv.id+'\')">Excluir</button></div></div>';
   }).join('');
 }
 
-function regP(id){
+function regP(id){if(READONLY)return;
   var inv=invoices.find(function(i){return i.id===id;});if(!inv)return;
   openPaymentModal(id);
 }
@@ -1547,8 +1547,8 @@ function openPaymentModal(invId){
           '</div>'+
           '<div style="color:var(--t2);margin:0 12px">'+(p.date||'—')+'</div>'+
           '<div style="display:flex;gap:4px">'+
-          '<button class="btn sm" onclick="editPaymentEntry(this.dataset.id, parseInt(this.dataset.idx))" data-id="'+invId+'" data-idx="'+pi+'" style="font-size:10px">✏</button>'+
-          '<button class="btn sm dn" onclick="deletePaymentEntry(this.dataset.id, parseInt(this.dataset.idx))" data-id="'+invId+'" data-idx="'+pi+'" style="font-size:10px">✕</button>'+
+          '<button class="btn sm readonly-hide" onclick="editPaymentEntry(this.dataset.id, parseInt(this.dataset.idx))" data-id="'+invId+'" data-idx="'+pi+'" style="font-size:10px">✏</button>'+
+          '<button class="btn sm dn readonly-hide" onclick="deletePaymentEntry(this.dataset.id, parseInt(this.dataset.idx))" data-id="'+invId+'" data-idx="'+pi+'" style="font-size:10px">✕</button>'+
           '</div>'+
           '</div>';
       }).join('')+'</div>';
@@ -1561,7 +1561,7 @@ function openPaymentModal(invId){
   div.innerHTML='<div class="mo" style="width:min(520px,96vw)">'+
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'+
     '<h3 style="margin:0">Registrar Pagamento</h3>'+
-    '<button class="btn sm dn" onclick="resetInvoicePayments(&quot;'+invId+'&quot;)" style="font-size:11px">🔄 Zerar pagamentos</button>'+
+    '<button class="btn sm dn readonly-hide" onclick="resetInvoicePayments(&quot;'+invId+'&quot;)" style="font-size:11px">🔄 Zerar pagamentos</button>'+
     '</div>'+
     '<div style="background:var(--b2);border-radius:var(--r);padding:12px;margin-bottom:14px;font-size:13px;line-height:1.9">'+
     '<div><strong>Invoice:</strong> '+inv.num+' — '+inv.client+'</div>'+
@@ -1585,7 +1585,7 @@ function openPaymentModal(invId){
   setTimeout(function(){var el=document.getElementById('pm-amount');if(el){el.focus();el.select();}},100);
 }
 
-async function savePayment(invId){
+async function savePayment(invId){if(READONLY)return;
   var inv=invoices.find(function(i){return i.id===invId;});if(!inv)return;
   var amount=parseFloat(document.getElementById('pm-amount').value)||0;
   var date=document.getElementById('pm-date').value;
@@ -1940,7 +1940,7 @@ function renderReport(){
       tableHtml += '<td style="padding:7px 10px;border-bottom:.5px solid var(--br1);text-align:right;color:var(--a)">' + fmt(inv.paid) + '</td>';
       tableHtml += '<td style="padding:7px 10px;border-bottom:.5px solid var(--br1);text-align:right;color:var(--d);font-weight:500">' + fmt(saldo) + '</td>';
       tableHtml += '<td style="padding:7px 10px;border-bottom:.5px solid var(--br1)"><span class="bx ' + stClass + '">' + stLabel + '</span></td>';
-      tableHtml += '<td style="padding:7px 10px;border-bottom:.5px solid var(--br1)"><button class="btn sm" onclick="regP(&quot;' + inv.id + '&quot;)">Registrar pagamento</button></td>';
+      tableHtml += '<td style="padding:7px 10px;border-bottom:.5px solid var(--br1)"><button class="btn sm readonly-hide" onclick="regP(&quot;' + inv.id + '&quot;)">Registrar pagamento</button></td>';
       tableHtml += '</tr>';
     });
 
@@ -2727,7 +2727,7 @@ function renderAlerts(){
         '</div>'+
         '<div style="text-align:right">'+
         '<div style="font-weight:600;color:#a32d2d">'+fmt(saldo)+'</div>'+
-        '<button class="btn sm" style="margin-top:4px;border-color:#a32d2d;color:#a32d2d" onclick="regP(this.dataset.id)" data-id="'+inv.id+'">Registrar pagamento</button>'+
+        '<button class="btn sm readonly-hide" style="margin-top:4px;border-color:#a32d2d;color:#a32d2d" onclick="regP(this.dataset.id)" data-id="'+inv.id+'">Registrar pagamento</button>'+
         '<button class="btn sm" onclick="openClientLedger(this.dataset.id)" data-id="'+inv.id+'">📋 Extrato</button>'+
         '</div></div>';
     });
@@ -4307,7 +4307,7 @@ function distributePayment(){
   updateDistribution();
 }
 
-function autoDistribute(){
+function autoDistribute(){if(READONLY)return;
   // Auto-distribute: oldest invoices first
   var totalReceived = parseFloat(document.getElementById('clipay-amount').value)||0;
   if(!totalReceived){alert('Informe o valor recebido primeiro.');return;}
@@ -4324,7 +4324,7 @@ function autoDistribute(){
   updateDistribution();
 }
 
-async function saveClientPayment(){
+async function saveClientPayment(){if(READONLY)return;
   var client = document.getElementById('clipay-client').value;
   var date = document.getElementById('clipay-date').value;
   var note = document.getElementById('clipay-note').value.trim();
@@ -4427,7 +4427,7 @@ async function editPaymentEntry(invId, idx){
   }catch(e){sync('err','Erro');alert(e.message);}
 }
 
-async function resetInvoicePayments(invId){
+async function resetInvoicePayments(invId){if(READONLY)return;
   if(!confirm('Zerar TODOS os pagamentos desta invoice?\n\nEla voltará para status PENDENTE com pago=$0.\n\nIsso não pode ser desfeito.'))return;
   var inv=invoices.find(function(i){return i.id===invId;});if(!inv)return;
   inv.paid=0;
