@@ -230,6 +230,7 @@ body.readonly .mo select { pointer-events:none !important; opacity:0.7; }
         </div>
         <button class="btn p" onclick="printVisualReport()" id="btn-print-visual" style="display:none">🖨 Imprimir visual</button>
       </div>
+      <div id="consignment-summary" style="margin-bottom:16px"></div>
       <div class="lg" id="lg"></div>
       <div id="sv"></div>
     </div>
@@ -1460,6 +1461,78 @@ async function openD(id){
 }
 
 // ── VISUAL ────────────────────────────────────────────
+function renderConsignmentSummary(){
+  var el = document.getElementById('consignment-summary');
+  if(!el) return;
+
+  // Get all client/company locations
+  var allLocs = getAllLocs();
+
+  // For each location, calculate consigned + sold value
+  var summaries = allLocs.map(function(loc){
+    var locSlabs = slabs.filter(function(s){
+      return s.location===loc || (s.sold_to===loc && s.status==='sold');
+    });
+    var consigned = locSlabs.filter(function(s){return s.status==='consigned';});
+    var sold = locSlabs.filter(function(s){return s.status==='sold';});
+    var consValue = consigned.reduce(function(a,s){return a+sv(s);},0);
+    var soldValue = sold.reduce(function(a,s){return a+sv(s);},0);
+    var consSqft = consigned.reduce(function(a,s){return a+sqft(s);},0);
+    return {loc:loc, consigned:consigned.length, sold:sold.length,
+            consValue:consValue, soldValue:soldValue, consSqft:consSqft,
+            total:locSlabs.length};
+  }).filter(function(s){return s.total>0;})
+    .sort(function(a,b){return b.consValue-a.consValue;});
+
+  if(!summaries.length){el.innerHTML='';return;}
+
+  var totalConsValue = summaries.reduce(function(a,s){return a+s.consValue;},0);
+  var totalSoldValue = summaries.reduce(function(a,s){return a+s.soldValue;},0);
+
+  el.innerHTML =
+    '<div style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">'+
+      '<div style="font-size:13px;font-weight:600">💰 Valor por empresa</div>'+
+      '<div style="font-size:11px;color:var(--t2)">'+
+        'Total consignado: <strong style="color:#185fa5">'+fmt(totalConsValue)+'</strong>'+
+        ' &nbsp;·&nbsp; Total vendido: <strong style="color:#2a6049">'+fmt(totalSoldValue)+'</strong>'+
+      '</div>'+
+    '</div>'+
+    '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px">'+
+    summaries.map(function(s){
+      var hasCons = s.consigned>0;
+      var hasSold = s.sold>0;
+      return '<div style="background:var(--b1);border:.5px solid var(--br1);border-radius:var(--r);padding:12px;cursor:pointer" onclick="selectLocVis(this.dataset.loc)" data-loc="'+s.loc+'">'+
+        '<div style="font-size:12px;font-weight:700;margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+s.loc+'">'+s.loc+'</div>'+
+        (hasCons?
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">'+
+            '<div style="display:flex;align-items:center;gap:5px">'+
+              '<span style="width:8px;height:8px;border-radius:50%;background:#85b7eb;display:inline-block"></span>'+
+              '<span style="font-size:11px;color:var(--t2)">'+s.consigned+' consignadas</span>'+
+            '</div>'+
+            '<span style="font-size:12px;font-weight:700;color:#185fa5">'+fmt(s.consValue)+'</span>'+
+          '</div>'+
+          '<div style="font-size:10px;color:var(--t2);margin-bottom:6px;padding-left:13px">'+s.consSqft.toFixed(0)+' sqft</div>'
+        :'')+
+        (hasSold?
+          '<div style="display:flex;justify-content:space-between;align-items:center">'+
+            '<div style="display:flex;align-items:center;gap:5px">'+
+              '<span style="width:8px;height:8px;border-radius:50%;background:#97c459;display:inline-block"></span>'+
+              '<span style="font-size:11px;color:var(--t2)">'+s.sold+' vendidas</span>'+
+            '</div>'+
+            '<span style="font-size:12px;font-weight:700;color:#2a6049">'+fmt(s.soldValue)+'</span>'+
+          '</div>'
+        :'')+
+        (!hasCons&&!hasSold?'<div style="font-size:11px;color:var(--t2)">'+s.total+' chapas</div>':'')+
+      '</div>';
+    }).join('')+
+    '</div>';
+}
+
+function selectLocVis(loc){
+  var el = document.getElementById('vl');
+  if(el){el.value=loc;renderVis();}
+}
+
 function renderVis(){
   document.getElementById('lg').innerHTML=locs.map(function(loc){
     var ls=slabs.filter(function(s){return s.location===loc;});if(!ls.length)return'';
@@ -2597,7 +2670,7 @@ function openBillModal(id){if(READONLY)return;
   document.getElementById('bill-modal').classList.remove('hidden');
 }
 
-async function saveBill(){if(READONLY)return;if(READONLY)return;if(READONLY)return;
+async function saveBill(){if(READONLY)return;
   var desc = document.getElementById('bill-desc').value.trim();
   var due = document.getElementById('bill-due').value;
   if(!desc||!due){alert('Descrição e data de vencimento são obrigatórios.');return;}
@@ -2609,6 +2682,7 @@ async function saveBill(){if(READONLY)return;if(READONLY)return;if(READONLY)retu
     due: due,
     recur: document.getElementById('bill-recur').value,
     status: document.getElementById('bill-status').value,
+    container_id: document.getElementById('bill-container')?document.getElementById('bill-container').value||null:null,
     paidDate: document.getElementById('bill-paid-date').value||null,
     obs: document.getElementById('bill-obs').value.trim()
   };
@@ -3918,7 +3992,15 @@ function openContainerModal(id){if(READONLY)return;
   document.getElementById('cont-name').value=c?c.name||'':'';
   document.getElementById('cont-date').value=c?c.date||'':'';
   document.getElementById('cont-desc').value=c?c.desc||'':'';
-  document.getElementById('cont-material').value=c?c.costs.material||'':'';
+  // Load material entries
+  materialEntries = [];
+  if(c && c.costs.materials && Array.isArray(c.costs.materials)){
+    materialEntries = c.costs.materials.map(function(m){return {id:uid(),supplier:m.supplier||'',amount:m.amount||0};});
+  } else if(c && c.costs.material){
+    materialEntries = [{id:uid(), supplier:'Material', amount:c.costs.material}];
+  }
+  if(!materialEntries.length) materialEntries = [{id:uid(), supplier:'', amount:''}];
+  renderMaterialEntries();
   document.getElementById('cont-freight').value=c?c.costs.freight||'':'';
   document.getElementById('cont-import').value=c?c.costs.importDuty||'':'';
   document.getElementById('cont-broker').value=c?c.costs.broker||'':'';
@@ -3933,7 +4015,8 @@ async function saveContainer(){
   var name=document.getElementById('cont-name').value.trim();
   if(!name){alert('Nome obrigatório.');return;}
   var costs={
-    material:parseFloat(document.getElementById('cont-material').value)||0,
+    materials: materialEntries.filter(function(e){return e.amount>0;}).map(function(e){return {supplier:e.supplier,amount:parseFloat(e.amount)||0};}),
+    material: getMaterialTotal(), // keep for backward compat
     freight:parseFloat(document.getElementById('cont-freight').value)||0,
     importDuty:parseFloat(document.getElementById('cont-import').value)||0,
     broker:parseFloat(document.getElementById('cont-broker').value)||0,
@@ -5843,6 +5926,42 @@ function openContainerPayments(contId){if(READONLY){viewContainerPayments(contId
       '</table>'+
     '</div>'+
 
+    // Linked bills section
+    (function(){
+      var linked = bills.filter(function(b){return b.container_id===contId;});
+      if(!linked.length) return '';
+      var STATUS_LABEL={'paid':'✅ Pago','pending':'⏳ Pendente','partial':'🔄 Parcial'};
+      var STATUS_COLOR={'paid':'#2a6049','pending':'#a32d2d','partial':'#854f0b'};
+      var totalLinked = linked.reduce(function(a,b){return a+(b.amount||0);},0);
+      var totalPaidLinked = linked.filter(function(b){return b.status==='paid';}).reduce(function(a,b){return a+(b.amount||0);},0);
+      return '<div class="sec">Contas vinculadas a este container</div>'+
+        '<div style="border:.5px solid var(--br1);border-radius:var(--r);overflow:hidden;margin-bottom:14px">'+
+        '<table style="width:100%;border-collapse:collapse">'+
+        '<thead><tr style="background:var(--b2)">'+
+          '<th style="padding:6px 10px;font-size:11px;color:var(--t2);text-align:left">Descrição</th>'+
+          '<th style="padding:6px 10px;font-size:11px;color:var(--t2);text-align:left">Categoria</th>'+
+          '<th style="padding:6px 10px;font-size:11px;color:var(--t2);text-align:left">Vencimento</th>'+
+          '<th style="padding:6px 10px;font-size:11px;color:var(--t2);text-align:right">Valor</th>'+
+          '<th style="padding:6px 10px;font-size:11px;color:var(--t2);text-align:center">Status</th>'+
+        '</tr></thead><tbody>'+
+        linked.sort(function(a,b){return (a.due||'').localeCompare(b.due||'');}).map(function(b,i){
+          var bg = i%2===0?'var(--b1)':'var(--b2)';
+          return '<tr style="background:'+bg+'">'+
+            '<td style="padding:7px 10px;font-size:12px">'+b.desc+'</td>'+
+            '<td style="padding:7px 10px;font-size:11px;color:var(--t2)">'+b.cat+'</td>'+
+            '<td style="padding:7px 10px;font-size:12px">'+b.due+'</td>'+
+            '<td style="padding:7px 10px;font-size:12px;text-align:right;font-weight:600">'+fmt(b.amount)+'</td>'+
+            '<td style="padding:7px 10px;text-align:center"><span style="font-size:11px;font-weight:600;color:'+(STATUS_COLOR[b.status]||'#666')+'">'+(STATUS_LABEL[b.status]||b.status)+'</span></td>'+
+          '</tr>';
+        }).join('')+
+        '<tr style="background:var(--b2);font-weight:700;border-top:2px solid var(--br1)">'+
+          '<td colspan="3" style="padding:7px 10px;font-size:12px">Total vinculado</td>'+
+          '<td style="padding:7px 10px;font-size:12px;text-align:right;color:#a32d2d">'+fmt(totalLinked)+'</td>'+
+          '<td style="padding:7px 10px;font-size:11px;text-align:center;color:#2a6049">Pago: '+fmt(totalPaidLinked)+'</td>'+
+        '</tr>'+
+        '</tbody></table></div>';
+    })()+
+
     // Add new payment form
     '<div class="sec">Registrar pagamento</div>'+
     '<div class="fg">'+
@@ -6133,6 +6252,194 @@ function viewContainerPayments(contId){
   '</div>';
   document.body.appendChild(div);
   div.addEventListener('click',function(e){if(e.target===div)div.remove();});
+}
+
+function viewContainerSlabs(contId){
+  var c = containers.find(function(x){return x.id===contId;});
+  if(!c)return;
+
+  var contSlabs = slabs.filter(function(s){return s.container_id===contId;});
+
+  // Group by lot + material
+  var groups = {};
+  contSlabs.forEach(function(s){
+    var k = s.lot+'||'+s.material;
+    if(!groups[k])groups[k]={lot:s.lot,material:s.material,type:s.type||'',slabs:[],
+      totalSqft:0,soldSqft:0,revenue:0,projRevenue:0,
+      avail:0,cons:0,sold:0,res:0};
+    var sf=sqft(s);
+    groups[k].slabs.push(s);
+    groups[k].totalSqft+=sf;
+    groups[k].projRevenue+=sv(s);
+    if(s.status==='sold'){groups[k].sold++;groups[k].soldSqft+=sf;groups[k].revenue+=sv(s);}
+    else if(s.status==='available')groups[k].avail++;
+    else if(s.status==='consigned')groups[k].cons++;
+    else if(s.status==='reserved')groups[k].res++;
+  });
+
+  var STATUS_COLOR={available:'#3b6d11',sold:'#a32d2d',consigned:'#185fa5',reserved:'#854f0b'};
+  var STATUS_BG={available:'#eaf3de',sold:'#fcebeb',consigned:'#e6f1fb',reserved:'#faeeda'};
+  var STATUS_LABEL={available:'Disponível',sold:'Vendida',consigned:'Consignada',reserved:'Reservada'};
+
+  var totalSlabs=contSlabs.length;
+  var totalSqft=contSlabs.reduce(function(a,s){return a+sqft(s);},0);
+  var totalSold=contSlabs.filter(function(s){return s.status==='sold';}).length;
+  var totalAvail=contSlabs.filter(function(s){return s.status==='available';}).length;
+  var totalCons=contSlabs.filter(function(s){return s.status==='consigned';}).length;
+  var totalRevenue=contSlabs.reduce(function(a,s){return s.status==='sold'?a+sv(s):a;},0);
+  var totalProj=contSlabs.reduce(function(a,s){return a+sv(s);},0);
+
+  // Build group rows
+  var groupHTML = Object.values(groups)
+    .sort(function(a,b){return a.lot.localeCompare(b.lot,undefined,{numeric:true});})
+    .map(function(g){
+      var slabRows = g.slabs
+        .sort(function(a,b){return parseInt(a.num)-parseInt(b.num);})
+        .map(function(s){
+          var sf=sqft(s);
+          return '<tr style="border-bottom:.5px solid var(--br1)">'+
+            '<td style="padding:5px 10px;font-size:12px;font-weight:600">#'+s.num+'</td>'+
+            '<td style="padding:5px 10px;font-size:11px;color:var(--t2)">'+(s.width&&s.height?s.width+'" × '+s.height+'"':'—')+'</td>'+
+            '<td style="padding:5px 10px;font-size:11px;text-align:right">'+(sf?sf.toFixed(1)+' sqft':'—')+'</td>'+
+            '<td style="padding:5px 10px;font-size:11px;text-align:right">'+(s.price_per_sqft?'$'+s.price_per_sqft+'/sqft':'—')+'</td>'+
+            '<td style="padding:5px 10px;font-size:11px;text-align:right;font-weight:600">'+(sv(s)?fmt(sv(s)):'—')+'</td>'+
+            '<td style="padding:5px 10px;text-align:center">'+
+              '<span style="padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;background:'+STATUS_BG[s.status]+';color:'+STATUS_COLOR[s.status]+'">'+
+                STATUS_LABEL[s.status]+
+              '</span>'+
+            '</td>'+
+            '<td style="padding:5px 10px;font-size:11px;color:var(--t2)">'+(s.sold_to||s.location||'—')+'</td>'+
+          '</tr>';
+        }).join('');
+
+      return '<div style="margin-bottom:12px;border:.5px solid var(--br1);border-radius:var(--r);overflow:hidden">'+
+        '<div style="background:#6b3fa0;color:#fff;padding:7px 12px;display:flex;justify-content:space-between;align-items:center">'+
+          '<div style="font-weight:700;font-size:12px">Lote '+g.lot+' — '+g.material+(g.type?' ('+g.type+')':'')+'</div>'+
+          '<div style="font-size:11px;opacity:.85">'+
+            g.slabs.length+' chapas · '+g.totalSqft.toFixed(1)+' sqft'+
+            (g.sold?' · '+g.sold+' vendidas':'')+(g.cons?' · '+g.cons+' consignadas':'')+
+            (g.avail?' · '+g.avail+' disponíveis':'')+
+          '</div>'+
+        '</div>'+
+        '<table style="width:100%;border-collapse:collapse">'+
+          '<thead><tr style="background:var(--b2)">'+
+            '<th style="padding:5px 10px;font-size:11px;color:var(--t2);text-align:left">Slab</th>'+
+            '<th style="padding:5px 10px;font-size:11px;color:var(--t2);text-align:left">Dimensões</th>'+
+            '<th style="padding:5px 10px;font-size:11px;color:var(--t2);text-align:right">Sqft</th>'+
+            '<th style="padding:5px 10px;font-size:11px;color:var(--t2);text-align:right">Preço</th>'+
+            '<th style="padding:5px 10px;font-size:11px;color:var(--t2);text-align:right">Valor</th>'+
+            '<th style="padding:5px 10px;font-size:11px;color:var(--t2);text-align:center">Status</th>'+
+            '<th style="padding:5px 10px;font-size:11px;color:var(--t2);text-align:left">Local/Cliente</th>'+
+          '</tr></thead>'+
+          '<tbody>'+slabRows+'</tbody>'+
+          '<tr style="background:var(--b2);font-weight:600;border-top:2px solid var(--br1)">'+
+            '<td style="padding:6px 10px;font-size:11px">Total: '+g.slabs.length+' chapas</td>'+
+            '<td></td>'+
+            '<td style="padding:6px 10px;font-size:11px;text-align:right">'+g.totalSqft.toFixed(1)+' sqft</td>'+
+            '<td></td>'+
+            '<td style="padding:6px 10px;font-size:11px;text-align:right;color:#2a6049">'+fmt(g.revenue)+'</td>'+
+            '<td></td><td></td>'+
+          '</tr>'+
+        '</table>'+
+      '</div>';
+    }).join('');
+
+  if(!groupHTML) groupHTML = '<div style="padding:24px;text-align:center;color:var(--t2)">Nenhuma chapa vinculada a este container.<br>Use o botão 🔗 Vincular chapas.</div>';
+
+  var existing = document.getElementById('cont-slabs-modal');
+  if(existing) existing.remove();
+  var div = document.createElement('div');
+  div.id = 'cont-slabs-modal';
+  div.className = 'mb';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:300';
+  div.innerHTML = '<div class="mo" style="width:min(860px,96vw);max-height:93vh;overflow-y:auto">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">'+
+      '<div>'+
+        '<h3 style="margin:0">📋 Chapas — '+c.name+'</h3>'+
+        '<div style="font-size:12px;color:var(--t2);margin-top:3px">'+(c.desc||'')+'</div>'+
+      '</div>'+
+      '<button class="btn sm" onclick="document.getElementById(&quot;cont-slabs-modal&quot;).remove()">Fechar</button>'+
+    '</div>'+
+
+    // Summary cards
+    '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:16px">'+
+      '<div style="background:var(--b2);border:.5px solid var(--br1);border-radius:var(--r);padding:10px;text-align:center">'+
+        '<div style="font-size:10px;color:var(--t2);margin-bottom:3px">Total</div>'+
+        '<div style="font-size:18px;font-weight:700">'+totalSlabs+'</div>'+
+        '<div style="font-size:10px;color:var(--t2)">chapas</div>'+
+      '</div>'+
+      '<div style="background:#eaf3de;border:.5px solid #97c459;border-radius:var(--r);padding:10px;text-align:center">'+
+        '<div style="font-size:10px;color:#3b6d11;margin-bottom:3px">Disponível</div>'+
+        '<div style="font-size:18px;font-weight:700;color:#3b6d11">'+totalAvail+'</div>'+
+        '<div style="font-size:10px;color:#3b6d11">chapas</div>'+
+      '</div>'+
+      '<div style="background:#e6f1fb;border:.5px solid #85b7eb;border-radius:var(--r);padding:10px;text-align:center">'+
+        '<div style="font-size:10px;color:#185fa5;margin-bottom:3px">Consignada</div>'+
+        '<div style="font-size:18px;font-weight:700;color:#185fa5">'+totalCons+'</div>'+
+        '<div style="font-size:10px;color:#185fa5">chapas</div>'+
+      '</div>'+
+      '<div style="background:#fcebeb;border:.5px solid #f09595;border-radius:var(--r);padding:10px;text-align:center">'+
+        '<div style="font-size:10px;color:#a32d2d;margin-bottom:3px">Vendida</div>'+
+        '<div style="font-size:18px;font-weight:700;color:#a32d2d">'+totalSold+'</div>'+
+        '<div style="font-size:10px;color:#a32d2d">chapas</div>'+
+      '</div>'+
+      '<div style="background:#f0f7f3;border:.5px solid #cde3d6;border-radius:var(--r);padding:10px;text-align:center">'+
+        '<div style="font-size:10px;color:#2a6049;margin-bottom:3px">Receita atual</div>'+
+        '<div style="font-size:16px;font-weight:700;color:#2a6049">'+fmt(totalRevenue)+'</div>'+
+        '<div style="font-size:10px;color:#2a6049">de '+fmt(totalProj)+' proj.</div>'+
+      '</div>'+
+    '</div>'+
+
+    groupHTML+
+
+  '</div>';
+  document.body.appendChild(div);
+  div.addEventListener('click',function(e){if(e.target===div)div.remove();});
+}
+
+// ══════════════════════════════════════════════════════
+// MULTI-SUPPLIER MATERIAL ENTRIES IN CONTAINER
+// ══════════════════════════════════════════════════════
+var materialEntries = []; // [{supplier:'', amount:0}]
+
+function addMaterialEntry(supplier, amount){
+  materialEntries.push({id:uid(), supplier:supplier||'', amount:amount||''});
+  renderMaterialEntries();
+}
+
+function removeMaterialEntry(id){
+  materialEntries = materialEntries.filter(function(e){return e.id!==id;});
+  renderMaterialEntries();
+  calcContainerTotal();
+}
+
+function renderMaterialEntries(){
+  var el = document.getElementById('cont-materials-list');
+  if(!el) return;
+  if(!materialEntries.length){
+    el.innerHTML = '<div style="font-size:12px;color:var(--t2)">Nenhum fornecedor adicionado ainda.</div>';
+    return;
+  }
+  el.innerHTML = materialEntries.map(function(e){
+    return '<div style="display:flex;gap:8px;align-items:center">'+
+      '<input placeholder="Fornecedor" value="'+e.supplier+'" oninput="updateMaterialEntry(this.dataset.eid,\'supplier\',this.value)" data-eid="'+e.id+'" '+
+        'style="flex:1;padding:7px 10px;border:.5px solid var(--br1);border-radius:var(--r);font-size:13px;background:var(--b1);color:var(--t1)">'+
+        'style="flex:1;padding:7px 10px;border:.5px solid var(--br1);border-radius:var(--r);font-size:13px;background:var(--b1);color:var(--t1)">'+
+      '<input type="number" placeholder="Valor $" value="'+e.amount+'" min="0" step="0.01" oninput="updateMaterialEntry(this.dataset.eid,\'amount\',this.value);calcContainerTotal()" data-eid="'+e.id+'" '+
+        'style="width:120px;padding:7px 10px;border:.5px solid var(--br1);border-radius:var(--r);font-size:13px;background:var(--b1);color:var(--t1)">'+
+        'style="width:120px;padding:7px 10px;border:.5px solid var(--br1);border-radius:var(--r);font-size:13px;background:var(--b1);color:var(--t1)">'+
+      '<button class="btn sm dn" onclick="removeMaterialEntry(this.dataset.eid)" data-eid="'+e.id+'" style="flex-shrink:0">✕</button>'+
+    '</div>';
+  }).join('');
+}
+
+function updateMaterialEntry(id, field, value){
+  var e = materialEntries.find(function(x){return x.id===id;});
+  if(e) e[field] = field==='amount'?(parseFloat(value)||0):value;
+}
+
+function getMaterialTotal(){
+  return materialEntries.reduce(function(a,e){return a+(parseFloat(e.amount)||0);},0);
 }
 
 function closeM(id){document.getElementById(id).classList.add('hidden');}
