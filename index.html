@@ -143,24 +143,10 @@ table tr:hover td{background:var(--b2);}
 .setup pre{background:var(--b2);border-radius:var(--r);padding:12px;font-size:11px;white-space:pre-wrap;max-height:280px;overflow-y:auto;border:.5px solid var(--br1);margin-bottom:12px;}
 @media(max-width:500px){.fg{grid-template-columns:1fr;}}
 
-/* READ-ONLY MODE */
-body.readonly .btn.p,
-body.readonly .btn.dn,
-body.readonly .btn[onclick*="open"],
-body.readonly .btn[onclick*="save"],
-body.readonly .btn[onclick*="add"],
-body.readonly .btn[onclick*="delete"],
-body.readonly .btn[onclick*="register"],
-body.readonly .btn[onclick*="novo"],
-body.readonly .btn[onclick*="nova"],
-body.readonly .btn[onclick*="novo"],
-body.readonly .btn[onclick*="New"],
-body.readonly input:not([disabled]),
-body.readonly textarea:not([disabled]),
-body.readonly select:not([disabled]) { pointer-events:none; }
-body.readonly .btn.p { opacity:0.3; cursor:not-allowed; }
-body.readonly .btn.dn { opacity:0.3; cursor:not-allowed; }
+/* READ-ONLY MODE — only hides write actions, keeps view/print/export */
 body.readonly .readonly-hide { display:none !important; }
+body.readonly input, body.readonly textarea { pointer-events:none; background:var(--b2) !important; }
+body.readonly select { pointer-events:none; }
 </style>
 </head>
 <body>
@@ -1042,12 +1028,6 @@ async function init(){
     if(READONLY){
       document.body.classList.add('readonly');
       document.getElementById('readonly-banner').style.display='block';
-      // Hide all action buttons in card renders
-      document.querySelectorAll('.btn.p, .btn.dn').forEach(function(b){
-        if(!b.classList.contains('nav-btn')&&!b.textContent.includes('🖨')&&!b.textContent.includes('📊')){
-          b.classList.add('readonly-hide');
-        }
-      });
     }
   }catch(e){
     if(e.message&&e.message.includes('does not exist')){showSetup();return;}
@@ -1245,11 +1225,8 @@ function calcStats(){
 }
 function applyReadonlyToRendered(){
   if(!READONLY)return;
-  document.querySelectorAll('.btn.p, .btn.dn').forEach(function(b){
-    if(!b.classList.contains('nav-btn') && !b.textContent.includes('🖨') && !b.textContent.includes('📊') && !b.textContent.includes('📋') && !b.textContent.includes('Relatório')){
-      b.style.display='none';
-    }
-  });
+  // Only hide elements explicitly marked as readonly-hide
+  document.querySelectorAll('.readonly-hide').forEach(function(b){b.style.display='none';});
 }
 function renderStats(){
   var s=calcStats();
@@ -1529,10 +1506,10 @@ function renderInvoices(){
       (ch.length?'<div style="font-size:11px;color:var(--t2);margin-top:5px">Chapas: '+ch.map(function(s){return'L'+s.lot+'#'+s.num;}).join(', ')+'</div>':'')+
       '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">'+
       '<button class="btn sm p" onclick="prevInv(\''+inv.id+'\')">🖨 Invoice</button>'+
-      '<button class="btn sm wn" onclick="editInv(\''+inv.id+'\')">✏ Editar</button>'+
+      '<button class="btn sm wn readonly-hide" onclick="editInv(\''+inv.id+'\')">✏ Editar</button>'+
         '<button class="btn sm" style="margin-top:4px;border-color:#a32d2d;color:#a32d2d" onclick="regP(this.dataset.id)" data-id="'+inv.id+'">Registrar pagamento</button>'+
         '<button class="btn sm" onclick="openClientLedger(this.dataset.id)" data-id="'+inv.id+'">📋 Extrato</button>'+
-      '<button class="btn sm dn" onclick="delInv(\''+inv.id+'\')">Excluir</button></div></div>';
+      '<button class="btn sm dn readonly-hide" onclick="delInv(\''+inv.id+'\')">Excluir</button></div></div>';
   }).join('');
 }
 
@@ -1655,7 +1632,14 @@ async function delInv(id){if(READONLY)return;
 }
 
 // ── INVOICE MODAL (criar + editar) ────────────────────
-function openIM(invId){if(READONLY)return;
+function openIM(invId){
+  if(READONLY){
+    if(invId){
+      // Allow viewing existing invoice in readonly mode
+      openIMReadonly(invId);
+    }
+    return;
+  }
   editInvId=invId||null;
   var inv=invId?invoices.find(function(i){return i.id===invId;}):null;
   selIds=inv?inv.slab_ids||[]:[];
@@ -2859,8 +2843,8 @@ function renderTransfersList(){
       '</div>'+
       '<div style="display:flex;gap:6px">'+
         '<button class="btn sm p" onclick="reprintTransfer(this.dataset.id)" data-id="'+t.id+'">🖨 Reimprimir</button>'+
-        '<button class="btn sm" onclick="editTransfer(this.dataset.id)" data-id="'+t.id+'">✏ Editar</button>'+
-        '<button class="btn sm dn" onclick="deleteTransfer(this.dataset.id)" data-id="'+t.id+'">✕</button>'+
+        '<button class="btn sm readonly-hide" onclick="editTransfer(this.dataset.id)" data-id="'+t.id+'">✏ Editar</button>'+
+        '<button class="btn sm dn readonly-hide" onclick="deleteTransfer(this.dataset.id)" data-id="'+t.id+'">✕</button>'+
       '</div>'+
     '</div>';
   }).join('');
@@ -4102,9 +4086,9 @@ function renderContainers(){
       '</div>'+
       '<div style="display:flex;gap:8px;align-items:center">'+
       '<span style="padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;background:'+(s.allSold?'#eaf3de':s.recovered>=100?'#eaf3de':'var(--b2)')+';color:'+statusColor+'">'+statusLabel+'</span>'+
-      '<button class="btn sm p" onclick="openLinkSlabsModal(this.dataset.id)" data-id="'+c.id+'">🔗 Vincular chapas</button>'+
-      '<button class="btn sm" onclick="openContainerModal(this.dataset.id)" data-id="'+c.id+'">✏ Editar</button>'+
-      '<button class="btn sm dn" onclick="deleteContainer(this.dataset.id)" data-id="'+c.id+'">Excluir</button>'+
+      '<button class="btn sm p readonly-hide" onclick="openLinkSlabsModal(this.dataset.id)" data-id="'+c.id+'">🔗 Vincular chapas</button>'+
+      '<button class="btn sm readonly-hide" onclick="openContainerModal(this.dataset.id)" data-id="'+c.id+'">✏ Editar</button>'+
+      '<button class="btn sm dn readonly-hide" onclick="deleteContainer(this.dataset.id)" data-id="'+c.id+'">Excluir</button>'+
       '</div></div>'+
 
       // ── Main KPI cards ──────────────────────────────
@@ -5550,8 +5534,8 @@ function renderProformasList(){
       '<div style="display:flex;gap:6px">'+
         '<button class="btn sm" onclick="reprintProforma(this.dataset.id)" data-id="'+p.id+'" style="border-color:#6b3fa0;color:#6b3fa0">🖨 Reimprimir</button>'+
         '<button class="btn sm" onclick="packingFromProforma(this.dataset.id)" data-id="'+p.id+'" style="border-color:#185fa5;color:#185fa5">📦 Packing List</button>'+
-        '<button class="btn sm" onclick="editProformaDoc(this.dataset.id)" data-id="'+p.id+'">✏ Editar</button>'+
-        '<button class="btn sm dn" onclick="deleteProformaDoc(this.dataset.id)" data-id="'+p.id+'">✕</button>'+
+        '<button class="btn sm readonly-hide" onclick="editProformaDoc(this.dataset.id)" data-id="'+p.id+'">✏ Editar</button>'+
+        '<button class="btn sm dn readonly-hide" onclick="deleteProformaDoc(this.dataset.id)" data-id="'+p.id+'">✕</button>'+
       '</div>'+
     '</div>';
   }).join('');
@@ -5666,8 +5650,8 @@ function renderPackingListsList(){
       '</div>'+
       '<div style="display:flex;gap:6px">'+
         '<button class="btn sm" onclick="reprintPackingList(this.dataset.id)" data-id="'+p.id+'" style="border-color:#185fa5;color:#185fa5">🖨 Reimprimir</button>'+
-        '<button class="btn sm" onclick="editPackingListDoc(this.dataset.id)" data-id="'+p.id+'">✏ Editar</button>'+
-        '<button class="btn sm dn" onclick="deletePackingListDoc(this.dataset.id)" data-id="'+p.id+'">✕</button>'+
+        '<button class="btn sm readonly-hide" onclick="editPackingListDoc(this.dataset.id)" data-id="'+p.id+'">✏ Editar</button>'+
+        '<button class="btn sm dn readonly-hide" onclick="deletePackingListDoc(this.dataset.id)" data-id="'+p.id+'">✕</button>'+
       '</div>'+
     '</div>';
   }).join('');
@@ -6012,6 +5996,71 @@ function printContainerPaymentReport(contId){
 
   document.getElementById('print-area').innerHTML = html;
   window.print();
+}
+
+function openIMReadonly(invId){
+  var inv = invoices.find(function(i){return i.id===invId;});
+  if(!inv)return;
+  var sids = inv.slab_ids||[];
+  var ch = sids.map(function(id){return slabs.find(function(s){return s.id===id;});}).filter(Boolean);
+  var extras = inv.extra_items||[];
+  var paid = (inv.payment_history||[]).reduce(function(a,p){return a+(p.amount||0);},0);
+
+  var existing = document.getElementById('inv-readonly-modal');
+  if(existing) existing.remove();
+
+  var slabRows = ch.map(function(s){
+    var sf = sqft(s);
+    return '<tr><td style="padding:6px 10px;font-size:12px">'+s.lot+'</td>'+
+      '<td style="padding:6px 10px;font-size:12px">#'+s.num+'</td>'+
+      '<td style="padding:6px 10px;font-size:12px">'+s.material+'</td>'+
+      '<td style="padding:6px 10px;font-size:12px;text-align:right">'+(sf?sf.toFixed(2):'—')+'</td>'+
+      '<td style="padding:6px 10px;font-size:12px;text-align:right">'+(s.price_per_sqft?'$'+s.price_per_sqft:'—')+'</td>'+
+      '<td style="padding:6px 10px;font-size:12px;text-align:right;font-weight:600">'+fmt(sf&&s.price_per_sqft?sf*s.price_per_sqft:0)+'</td>'+
+      '</tr>';
+  }).join('');
+
+  var payRows = (inv.payment_history||[]).map(function(p){
+    return '<tr><td style="padding:5px 10px;font-size:11px">'+(p.date||'—')+'</td>'+
+      '<td style="padding:5px 10px;font-size:11px">'+fmt(p.amount)+'</td>'+
+      '<td style="padding:5px 10px;font-size:11px">'+(p.note||'—')+'</td></tr>';
+  }).join('');
+
+  var div = document.createElement('div');
+  div.id = 'inv-readonly-modal';
+  div.className = 'mb';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:300';
+  div.innerHTML = '<div class="mo" style="width:min(700px,96vw);max-height:92vh;overflow-y:auto">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">'+
+      '<h3 style="margin:0">📄 '+inv.num+'</h3>'+
+      '<div style="display:flex;gap:8px">'+
+        '<button class="btn sm p" onclick="prevInv(''+invId+'')">🖨 Imprimir</button>'+
+        '<button class="btn sm" onclick="document.getElementById('inv-readonly-modal').remove()">Fechar</button>'+
+      '</div>'+
+    '</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;font-size:12px">'+
+      '<div><div style="color:var(--t2);font-size:11px">Cliente</div><div style="font-weight:600;font-size:14px">'+inv.client+'</div></div>'+
+      '<div><div style="color:var(--t2);font-size:11px">Data</div><div style="font-weight:600">'+inv.date+'</div></div>'+
+      '<div><div style="color:var(--t2);font-size:11px">Total</div><div style="font-weight:700;font-size:16px;color:var(--a)">'+fmt(inv.total)+'</div></div>'+
+      '<div><div style="color:var(--t2);font-size:11px">Status</div><div style="font-weight:600">'+inv.status+'</div></div>'+
+      '<div><div style="color:var(--t2);font-size:11px">Pago</div><div style="font-weight:600;color:#2a6049">'+fmt(paid)+'</div></div>'+
+      '<div><div style="color:var(--t2);font-size:11px">Saldo</div><div style="font-weight:600;color:'+(inv.total-paid>0?'#a32d2d':'#2a6049')+'">'+fmt(inv.total-paid)+'</div></div>'+
+    '</div>'+
+    (ch.length?
+      '<div class="sec">Chapas ('+(ch.length)+')</div>'+
+      '<div style="border:.5px solid var(--br1);border-radius:var(--r);overflow:hidden;margin-bottom:12px">'+
+      '<table style="width:100%;border-collapse:collapse">'+
+      '<thead><tr style="background:var(--b2)"><th style="padding:6px 10px;font-size:11px;text-align:left">Lote</th><th style="padding:6px 10px;font-size:11px;text-align:left">#</th><th style="padding:6px 10px;font-size:11px;text-align:left">Material</th><th style="padding:6px 10px;font-size:11px;text-align:right">Sqft</th><th style="padding:6px 10px;font-size:11px;text-align:right">Preço</th><th style="padding:6px 10px;font-size:11px;text-align:right">Total</th></tr></thead>'+
+      '<tbody>'+slabRows+'</tbody></table></div>':'')+
+    (payRows?
+      '<div class="sec">Pagamentos recebidos</div>'+
+      '<div style="border:.5px solid var(--br1);border-radius:var(--r);overflow:hidden;margin-bottom:12px">'+
+      '<table style="width:100%;border-collapse:collapse">'+
+      '<thead><tr style="background:var(--b2)"><th style="padding:6px 10px;font-size:11px;text-align:left">Data</th><th style="padding:6px 10px;font-size:11px;text-align:left">Valor</th><th style="padding:6px 10px;font-size:11px;text-align:left">Obs</th></tr></thead>'+
+      '<tbody>'+payRows+'</tbody></table></div>':'')+
+  '</div>';
+  document.body.appendChild(div);
+  div.addEventListener('click',function(e){if(e.target===div)div.remove();});
 }
 
 function closeM(id){document.getElementById(id).classList.add('hidden');}
