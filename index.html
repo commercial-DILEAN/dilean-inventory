@@ -278,7 +278,7 @@ body.readonly .mo select { pointer-events:none !important; opacity:0.7; }
     <div id="page-clients" class="hidden">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
         <span style="font-size:13px;color:var(--t2)">Empresas cadastradas — ao cadastrar aqui, o nome aparece automaticamente como local no estoque e na invoice</span>
-        <button class="btn p" onclick="openClientModal()">+ Nova Empresa</button>
+        <button class="btn p readonly-hide" onclick="openClientModal()">+ Nova Empresa</button>
       </div>
       <div id="clients-list"></div>
     </div>
@@ -503,7 +503,7 @@ body.readonly .mo select { pointer-events:none !important; opacity:0.7; }
     <div id="page-bills" class="hidden">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
         <span style="font-size:13px;color:var(--t2)">Contas e despesas da empresa</span>
-        <button class="btn p" onclick="openBillModal()">+ Nova Conta</button>
+        <button class="btn p readonly-hide" onclick="openBillModal()">+ Nova Conta</button>
       </div>
       <div class="sr" id="bills-stats"></div>
       <div id="bills-list"></div>
@@ -619,7 +619,7 @@ body.readonly .mo select { pointer-events:none !important; opacity:0.7; }
     <div class="fi" style="margin-top:10px"><label>Observações</label><textarea id="cli-obs" placeholder="Notas sobre o cliente..."></textarea></div>
     <div class="ma">
       <button class="btn" onclick="closeM('clim')">Cancelar</button>
-      <button class="btn p" onclick="saveClient()">Salvar Empresa</button>
+      <button class="btn p readonly-hide" onclick="saveClient()">Salvar Empresa</button>
     </div>
   </div>
 </div>
@@ -1102,11 +1102,11 @@ function renderClientsList(){
       '<div style="display:flex;gap:6px">'+
       '<button class="btn sm p" onclick="useClientInInvoice(\''+c.id+'\')">Usar na invoice</button>'+
       '<button class="btn sm" onclick="openClientModal(\''+c.id+'\')">Editar</button>'+
-      '<button class="btn sm dn" onclick="deleteClient(\''+c.id+'\')">Excluir</button>'+
+      '<button class="btn sm dn readonly-hide" onclick="deleteClient(\''+c.id+'\')">Excluir</button>'+
       '</div></div>';
   }).join('');
 }
-function openClientModal(id){
+function openClientModal(id){if(READONLY)return;
   editClientId=id||null;
   var c=id?clients.find(function(x){return x.id===id;}):null;
   document.getElementById('clim-title').textContent=c?'Editar Empresa':'Nova Empresa Cliente';
@@ -1119,7 +1119,7 @@ function openClientModal(id){
   document.getElementById('cli-obs').value=c?c.obs||'':'';
   document.getElementById('clim').classList.remove('hidden');
 }
-async function saveClient(){
+async function saveClient(){if(READONLY)return;
   var name=document.getElementById('cli-name').value.trim();if(!name){alert('Nome obrigatório.');return;}
   var c={id:editClientId||uid(),name:name,contact:document.getElementById('cli-contact').value.trim(),addr:document.getElementById('cli-addr').value.trim(),phone:document.getElementById('cli-phone').value.trim(),email:document.getElementById('cli-email').value.trim(),cid:document.getElementById('cli-cid').value.trim(),obs:document.getElementById('cli-obs').value.trim()};
   if(editClientId){
@@ -1137,7 +1137,8 @@ async function saveClient(){
   sync('ok','Salvo');
   closeM('clim');renderClientsList();rebuildSels();renderLocsList();
 }
-async function deleteClient(id){
+async function deleteClient(id){if(READONLY)return;
+  // id){
   if(!confirm('Excluir esta empresa? Ela tambem sera removida da lista de locais.'))return;
   var c=clients.find(function(x){return x.id===id;});
   clients=clients.filter(function(x){return x.id!==id;});
@@ -2581,7 +2582,7 @@ var editBillId = null;
 var CAT_LABELS = {rent:'Aluguel',supplier:'Fornecedor',util:'Utilidades',tax:'Impostos',freight:'Frete/Transporte',salary:'Salário',other:'Outro'};
 var CAT_COLORS = {rent:'#185fa5',supplier:'#2a6049',util:'#854f0b',tax:'#a32d2d',freight:'#6b3fa0',salary:'#b85a1a',other:'#6b6b67'};
 
-function openBillModal(id){
+function openBillModal(id){if(READONLY)return;
   editBillId = id||null;
   var b = id?bills.find(function(x){return x.id===id;}):null;
   document.getElementById('bill-modal-title').textContent = b?'Editar Conta':'Nova Conta';
@@ -2596,7 +2597,7 @@ function openBillModal(id){
   document.getElementById('bill-modal').classList.remove('hidden');
 }
 
-async function saveBill(){
+async function saveBill(){if(READONLY)return;if(READONLY)return;if(READONLY)return;
   var desc = document.getElementById('bill-desc').value.trim();
   var due = document.getElementById('bill-due').value;
   if(!desc||!due){alert('Descrição e data de vencimento são obrigatórios.');return;}
@@ -2621,7 +2622,8 @@ async function saveBill(){
   renderAlerts();
 }
 
-async function deleteBill(id){
+async function deleteBill(id){if(READONLY)return;
+  // id){
   if(!confirm('Excluir esta conta?'))return;
   bills = bills.filter(function(x){return x.id!==id;});
   await saveSetting('bills', bills);
@@ -2629,7 +2631,8 @@ async function deleteBill(id){
   renderAlerts();
 }
 
-async function toggleBillPaid(id){
+async function toggleBillPaid(id){if(READONLY)return;
+  // id){
   var b = bills.find(function(x){return x.id===id;});if(!b)return;
   b.status = b.status==='paid'?'pending':'paid';
   b.paidDate = b.status==='paid'?new Date().toISOString().slice(0,10):null;
@@ -2684,9 +2687,9 @@ function renderBills(){
       '<div style="text-align:right;flex-shrink:0">'+
       '<div style="font-size:18px;font-weight:600;color:'+(b.status==='paid'?'var(--a)':'var(--d)')+'">'+fmt(b.amount)+'</div>'+
       '<div style="display:flex;gap:5px;margin-top:8px;justify-content:flex-end">'+
-      '<button class="btn sm '+(b.status==="paid"?"":"p")+'" onclick="toggleBillPaid(this.dataset.id)" data-id="'+b.id+'">'+(b.status==="paid"?"Reabrir":"✓ Pago")+"</button>"+
-      '<button class="btn sm" onclick="openBillModal(this.dataset.id)" data-id="'+b.id+'">Editar</button>'+
-      '<button class="btn sm dn" onclick="deleteBill(this.dataset.id)" data-id="'+b.id+'">✕</button>'+
+      '<button class="btn sm '+(b.status==="paid"?"":"p")+'" class_placeholder onclick="if(READONLY)return;toggleBillPaid(this.dataset.id)" data-id="'+b.id+'">'+(b.status==="paid"?"Reabrir":"✓ Pago")+"</button>"+
+      '<button class="btn sm readonly-hide" onclick="openBillModal(this.dataset.id)" data-id="'+b.id+'">Editar</button>'+
+      '<button class="btn sm dn readonly-hide" onclick="deleteBill(this.dataset.id)" data-id="'+b.id+'">✕</button>'+
       '</div></div></div></div>';
   }).join('');
 }
@@ -2767,7 +2770,7 @@ function renderAlerts(){
         '</div>'+
         '<div style="text-align:right">'+
         '<div style="font-weight:600;color:#a32d2d">'+fmt(b.amount)+'</div>'+
-        '<button class="btn sm p" style="margin-top:4px" onclick="toggleBillPaid(this.dataset.id)" data-id="'+b.id+'">✓ Marcar pago</button>'+
+        '<button class="btn sm p" style="margin-top:4px" class_placeholder onclick="if(READONLY)return;toggleBillPaid(this.dataset.id)" data-id="'+b.id+'">✓ Marcar pago</button>'+
         '</div></div>';
     });
     html += '</div>';
@@ -3216,7 +3219,8 @@ async function saveFixedExp(){
   renderFinanceiro();
 }
 
-async function deleteFixedExp(id){
+async function deleteFixedExp(id){if(READONLY)return;
+  // id){
   if(!confirm('Excluir este gasto fixo?'))return;
   fixedExps=fixedExps.filter(function(x){return x.id!==id;});
   await saveSetting('fixedExps',fixedExps);
@@ -3334,7 +3338,7 @@ function renderFinanceiro(){
           '<div style="display:flex;align-items:center;gap:8px">'+
           '<span style="font-weight:600;color:var(--d)">'+fmt(fe.amount)+'</span>'+
           '<button class="btn sm" onclick="openFixedExpModal(this.dataset.id)" data-id="'+fe.id+'">✏</button>'+
-          '<button class="btn sm dn" onclick="deleteFixedExp(this.dataset.id)" data-id="'+fe.id+'">✕</button>'+
+          '<button class="btn sm dn readonly-hide" onclick="deleteFixedExp(this.dataset.id)" data-id="'+fe.id+'">✕</button>'+
           '</div></div>';
       }).join('')+
       '<div style="display:flex;justify-content:space-between;padding:8px 0;font-weight:600;font-size:13px">'+
@@ -3359,7 +3363,7 @@ function renderFinanceiro(){
           '<div style="display:flex;align-items:center;gap:8px">'+
           '<span style="font-weight:600;color:var(--d)">'+fmt(ge.amount)+'</span>'+
           '<button class="btn sm" onclick="openGeneralExpModal(this.dataset.id)" data-id="'+ge.id+'">✏</button>'+
-          '<button class="btn sm dn" onclick="deleteGeneralExp(this.dataset.id)" data-id="'+ge.id+'">✕</button>'+
+          '<button class="btn sm dn readonly-hide" onclick="deleteGeneralExp(this.dataset.id)" data-id="'+ge.id+'">✕</button>'+
           '</div></div>';
       }).join('')+
       (generalExps.length>10?'<div style="font-size:11px;color:var(--t2);padding:6px 0">...e mais '+(generalExps.length-10)+' lançamentos</div>':'')+
@@ -3817,7 +3821,8 @@ async function saveGeneralExp(existingId){
   renderFinanceiro();
 }
 
-async function deleteGeneralExp(id){
+async function deleteGeneralExp(id){if(READONLY)return;
+  // id){
   if(!confirm('Excluir este lançamento?'))return;
   generalExps=generalExps.filter(function(x){return x.id!==id;});
   await saveSetting('generalExps',generalExps);
