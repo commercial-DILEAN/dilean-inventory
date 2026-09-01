@@ -3738,15 +3738,17 @@ function openClientLedger(invIdOrClientName){
 
       if(payGroups[groupKey]){
         payGroups[groupKey].paid = +(payGroups[groupKey].paid + p.amount).toFixed(2);
+        payGroups[groupKey]._payments.push({invId:inv.id,idx:pi,amount:p.amount});
       } else {
-        payGroups[groupKey] = {date:p.date||inv.date||'', desc:desc, paid:p.amount, _ts:ts};
+        payGroups[groupKey] = {date:p.date||inv.date||'', desc:desc, paid:p.amount, _ts:ts,
+          _payments:[{invId:inv.id,idx:pi,amount:p.amount}]};
       }
     });
   });
 
   // Add all payment groups as events
   Object.values(payGroups).forEach(function(pg){
-    events.push({date:pg.date,type:'payment',desc:pg.desc,charged:0,paid:pg.paid,_ts:pg._ts});
+    events.push({date:pg.date,type:'payment',desc:pg.desc,charged:0,paid:pg.paid,_ts:pg._ts,_payments:pg._payments||[]});
   });
 
   // Sort: by date, invoices first, then by registration time
@@ -3779,6 +3781,19 @@ function openClientLedger(invIdOrClientName){
       '</td>'+
       '<td style="padding:7px 12px;text-align:right;font-size:13px;font-weight:700;color:'+(runBal>0.01?'#a32d2d':'#2a6049')+'">'+
         fmt(Math.abs(runBal))+'</td>'+
+      '<td style="padding:4px 8px;text-align:center">'+
+        (!isInv && e._payments && e._payments.length===1
+          ? '<button class="btn sm dn" onclick="deletePaymentFromLedger(this)" '+
+            'data-inv="'+e._payments[0].invId+'" data-idx="'+e._payments[0].idx+'" '+
+            'data-client="'+(typeof clientName!=='undefined'?clientName:'')+
+            '" title="Excluir pagamento" style="font-size:10px;padding:2px 6px">✕</button>'
+          : (!isInv && e._payments && e._payments.length>1
+            ? '<button class="btn sm" onclick="managePaymentGroup(this)" '+
+              'data-payments=\''+(JSON.stringify(e._payments||[])).replace(/'/g,'&#39;')+'\''+
+              ' data-client="'+(typeof clientName!=='undefined'?clientName:'')+
+              '" title="Gerenciar '+e._payments.length+' pagamentos" style="font-size:10px;padding:2px 6px">⚙ '+e._payments.length+'</button>'
+            : ''))+
+      '</td>'+
       '</tr>';
   }).join('');
 
@@ -6440,6 +6455,41 @@ function updateMaterialEntry(id, field, value){
 
 function getMaterialTotal(){
   return materialEntries.reduce(function(a,e){return a+(parseFloat(e.amount)||0);},0);
+}
+
+async function deletePaymentFromLedger(btn){
+  var invId = btn.dataset.inv;
+  var idx = parseInt(btn.dataset.idx);
+  var clientName = btn.dataset.client;
+  if(!confirm('Excluir este pagamento?')) return;
+
+  var inv = invoices.find(function(i){return i.id===invId;});
+  if(!inv) return;
+  var history = Array.isArray(inv.payment_history)?inv.payment_history:[];
+  var removed = history.splice(idx,1)[0];
+  if(!removed) return;
+
+  inv.payment_history = history;
+  inv.paid = +(inv.paid - removed.amount).toFixed(2);
+  if(inv.paid<0) inv.paid = 0;
+  inv.status = inv.paid>=inv.total?'paid':inv.paid>0?'partial':'pending';
+
+  try{
+    sync('spin','Removendo...');
+    await sbU('invoices', inv.id, {payment_history:history, paid:inv.paid, status:inv.status});
+    sync('ok','Removido!');
+    renderInvoices(); renderStats();
+    // Reopen ledger
+    openClientLedger(clientName||invId);
+  } catch(e){sync('err','Erro');alert(e.message);}
+}
+
+function managePaymentGroup(btn){
+  var payments = JSON.parse(btn.dataset.payments||'[]');
+  if(!payments.length) return;
+  // Open first invoice's payment modal
+  var invId = payments[0].invId;
+  openPaymentModal(invId);
 }
 
 function closeM(id){document.getElementById(id).classList.add('hidden');}
