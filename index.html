@@ -4020,8 +4020,8 @@ function buildCashFlowFull(days){
 var editContId = null;
 
 function calcContainerTotal(){
-  var fields = ['cont-material','cont-freight','cont-import','cont-broker','cont-delivery','cont-other'];
-  var total = fields.reduce(function(a,id){
+  var fields = ['cont-freight','cont-import','cont-broker','cont-delivery','cont-other'];
+  var total = getMaterialTotal() + fields.reduce(function(a,id){
     var el=document.getElementById(id);return a+(el?parseFloat(el.value)||0:0);
   },0);
   var el=document.getElementById('cont-total-display');
@@ -4114,6 +4114,9 @@ function rebuildContainerSel(){
 }
 
 function getContainerStats(c){
+  // Recompute totalCost in case it was saved with NaN (materials array issue)
+  var safeCost = ['material','freight','importDuty','broker','delivery','other'].reduce(function(a,k){return a+(c.costs&&typeof c.costs[k]==='number'?c.costs[k]:0);},0);
+  if(isNaN(c.totalCost)||!c.totalCost) c.totalCost = safeCost;
   var contSlabs = slabs.filter(function(s){return s.container_id===c.id;});
   var totalSlabs = contSlabs.length;
   var soldSlabs  = contSlabs.filter(function(s){return s.status==='sold';});
