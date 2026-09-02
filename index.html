@@ -2678,11 +2678,22 @@ function openBillModal(id){if(READONLY)return;
   document.getElementById('bill-status').value = b?b.status||'pending':'pending';
   document.getElementById('bill-paid-date').value = b?b.paidDate||'':'';
   document.getElementById('bill-obs').value = b?b.obs||'':'';
-  // Restore container selection
-  setTimeout(function(){
-    var csel = document.getElementById('bill-container');
-    if(csel) csel.value = b&&b.container_id?b.container_id:'';
-  },50);
+
+  // Populate container dropdown
+  var csel = document.getElementById('bill-container');
+  if(csel){
+    var parseC = function(name){var m=name.match(/^(\d+)[Cc](\d{4})/);return m?{year:parseInt(m[2]),num:parseInt(m[1])}:{year:9999,num:9999};};
+    var sorted = containers.slice().sort(function(a,c){var pa=parseC(a.name),pb=parseC(c.name);return pa.year!==pb.year?pa.year-pb.year:pa.num-pb.num;});
+    csel.innerHTML = '<option value="">— Nenhum —</option>';
+    sorted.forEach(function(c){
+      var o=document.createElement('option');
+      o.value=c.id;
+      o.textContent=c.name+(c.desc?' — '+c.desc.substring(0,30):'');
+      csel.appendChild(o);
+    });
+    csel.value = b&&b.container_id?b.container_id:'';
+  }
+
   document.getElementById('bill-modal').classList.remove('hidden');
 }
 
