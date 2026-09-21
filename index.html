@@ -1565,23 +1565,33 @@ async function renderVis(){
   var ls=slabs.filter(function(s){return s.location===selLoc||(s.sold_to===selLoc&&s.status==='sold');});
   if(!ls.length){sv2.innerHTML='<div class="empty">Nenhuma chapa neste local.</div>';return;}
 
-  // Pre-load ALL photos for this location before rendering
+  // Pre-load ALL photos for this location
   var missing=ls.filter(function(s){return !s.photo;});
   if(missing.length){
-    sv2.innerHTML='<div style="padding:20px;text-align:center;color:var(--t2)"><span class="sp"></span> Carregando '+missing.length+' fotos...</div>';
+    sv2.innerHTML='<div style="padding:20px;text-align:center;color:var(--t2)"><span class="sp"></span> Carregando fotos ('+(missing.length)+')...</div>';
     try{
-      var batches=[];
-      for(var bi=0;bi<missing.length;bi+=80)batches.push(missing.slice(bi,bi+80));
-      var results=await Promise.all(batches.map(function(batch){
-        return fetch(SB+'/rest/v1/slabs?id=in.('+batch.map(function(s){return s.id;}).join(',')+')'+'&select=id,photo',{headers:H})
-          .then(function(r){return r.ok?r.json():[];}).catch(function(){return[];});
-      }));
-      [].concat.apply([],results).forEach(function(row){
+      var locEnc=encodeURIComponent(selLoc);
+      // Use PostgREST or() filter + high limit to get all photos in one call
+      var r1=await fetch(SB+'/rest/v1/slabs?location=eq.'+locEnc+'&select=id,photo&limit=500',{headers:H});
+      var r2=await fetch(SB+'/rest/v1/slabs?sold_to=eq.'+locEnc+'&status=eq.sold&select=id,photo&limit=500',{headers:H});
+      var d1=r1.ok?await r1.json():[];
+      var d2=r2.ok?await r2.json():[];
+      var allRows=d1.concat(d2);
+      var withPhoto=allRows.filter(function(r){return r.photo;});
+      console.log('[Visual] selLoc='+selLoc+' missing='+missing.length+' fetched='+allRows.length+' withPhoto='+withPhoto.length);
+      allRows.forEach(function(row){
         if(!row.photo)return;
         var s=slabs.find(function(x){return x.id===row.id;});
         if(s)s.photo=row.photo;
       });
-    }catch(e){console.error('photo preload error',e);}
+      // Show status
+      var loaded=ls.filter(function(s){return s.photo;}).length;
+      sv2.innerHTML='<div style="padding:8px 16px;font-size:11px;color:var(--t2);text-align:center">'+loaded+' de '+ls.length+' fotos carregadas</div>';
+    }catch(e){
+      console.error('photo preload error',e);
+      sv2.innerHTML='<div style="padding:20px;text-align:center;color:var(--d)">Erro ao carregar fotos: '+e.message+'</div>';
+      return;
+    }
   }
 
   var lots=[...new Set(ls.map(function(s){return s.lot;}))];
@@ -1590,10 +1600,39 @@ async function renderVis(){
     return'<div class="lh">Lote '+lot+' — '+g[0].material+(g[0].type?' ('+g[0].type+')':'')+'</div>'+
       '<div class="sg">'+g.map(function(s){
         var lbl=s.status==='sold'?'✗ Vendida':s.status==='reserved'?'⏳ Reservada':s.status==='consigned'?'⇄ Consignada':'✓ Disponível';
-        var ph=s.photo?'<img class="sph" src="'+s.photo+'">':'<div class="spp">🪨</div>';
+        var ph=s.photo?'<img class="sph" src="'+s.photo+'">'+'<div class="spp" data-vis-id="'+s.id+'" style="display:none">🪨</div>'  :'<div class="spp" data-vis-id="'+s.id+'">🪨</div>';
         return'<div class="st '+s.status+'" onclick="openD(\''+s.id+'\')"><div class="ssb '+s.status+'"></div>'+ph+'<div class="si"><div class="sn">#'+s.num+'</div><div class="ss">'+(sqft(s)?sqft(s).toFixed(1)+' sqft':'—')+'</div><div class="ss">'+lbl+'</div></div></div>';
       }).join('')+'</div></div>';
   }).join('');
+
+  // Load photos progressively in small batches so DOM updates as each arrives
+  loadVisPhotosProgressive(ls);
+}
+
+async function loadVisPhotosProgressive(ls){
+  var toLoad = ls.filter(function(s){return !s.photo;});
+  if(!toLoad.length) return;
+  var BATCH = 15;
+  for(var i=0;i<toLoad.length;i+=BATCH){
+    var batch = toLoad.slice(i,i+BATCH);
+    try{
+      var ids = batch.map(function(s){return s.id;}).join(',');
+      var r = await fetch(SB+'/rest/v1/slabs?id=in.('+ids+')&select=id,photo',{headers:H});
+      if(!r.ok)continue;
+      var data = await r.json();
+      data.forEach(function(row){
+        if(!row.photo)return;
+        var s = slabs.find(function(x){return x.id===row.id;});
+        if(s)s.photo=row.photo;
+        var placeholder = document.querySelector('[data-vis-id="'+row.id+'"]');
+        if(placeholder){
+          var img = document.createElement('img');
+          img.className='sph';img.src=row.photo;
+          placeholder.parentNode.replaceChild(img,placeholder);
+        }
+      });
+    }catch(e){}
+  }
 }
 
 function selL(loc){
