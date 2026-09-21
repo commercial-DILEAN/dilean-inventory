@@ -201,6 +201,10 @@ body.readonly .mo select { pointer-events:none !important; opacity:0.7; }
           <option value="reserved">Reservada</option><option value="consigned">Consignada</option>
         </select>
         <button class="btn p readonly-hide" onclick="openSM()">+ Nova Chapa</button>
+        <button class="btn readonly-hide" id="btn-bulk-consign" onclick="openBulkConsign()" style="display:none;border-color:#185fa5;color:#185fa5">⇄ Consignar selecionadas</button>
+        <button class="btn readonly-hide" id="btn-bulk-location" onclick="openBulkLocation()" style="display:none;border-color:#854f0b;color:#854f0b">📍 Mudar local</button>
+        <button class="btn" id="btn-bulk-cancel" onclick="cancelBulkSelect()" style="display:none">✕ Cancelar seleção</button>
+        <button class="btn" onclick="toggleBulkMode()" id="btn-bulk-toggle" style="border-color:#185fa5;color:#185fa5">☐ Selecionar chapas</button>
         <div style="display:flex;gap:6px;align-items:center">
           <select id="report-status-filter" style="padding:5px 8px;border:.5px solid var(--br1);border-radius:var(--r);font-size:12px;background:var(--b1);color:var(--t1)">
             <option value="">Todos os status</option>
@@ -964,7 +968,7 @@ async function sbU(t,id,d){
 async function sbD(t,id){var r=await fetch(SB+'/rest/v1/'+t+'?id=eq.'+id,{method:'DELETE',headers:H});if(!r.ok)throw new Error(await r.text());}
 async function sbUpsert(t,d){var r=await fetch(SB+'/rest/v1/'+t,{method:'POST',headers:Object.assign({},H,{'Prefer':'resolution=merge-duplicates'}),body:JSON.stringify(d)});if(!r.ok)throw new Error(await r.text());return r.json();}
 
-var slabs=[],invoices=[],transfers=[],proformas=[],packingLists=[],clients=[],bills=[],fixedExps=[],generalExps=[],containers=[],finBalance=0,finBalanceDate='',locs=['Meta Surface','ZTX Surfaces','Pacific Shore','Hope Solutions','Escritório'];
+var slabs=[],invoices=[],bulkMode=false,bulkSel=[],transfers=[],proformas=[],packingLists=[],clients=[],bills=[],fixedExps=[],generalExps=[],containers=[],finBalance=0,finBalanceDate='',locs=['Meta Surface','ZTX Surfaces','Pacific Shore','Hope Solutions','Escritório'];
 var editId=null,editInvId=null,editClientId=null,selLoc=null,selIds=[],curPhoto=null,eic=0;
 var cfg={name:'DILEAN MARBLES CORP',addr:'1661 E Sample Rd, Pompano Beach FL 33064',phone:'346 455 8150',email:'',bank:'Bank Of America, N.A.',acct:'8981 6729 0208',wire:'063100277',swift:'BOFAUS6S',zelle:'346 455 8150',bankAddr:'555 California St., San Francisco, CA 94104'};
 
@@ -1232,6 +1236,8 @@ function calcStats(){
   var t=slabs.length,
     av=slabs.filter(function(s){return s.status==='available';}).length,
     so=slabs.filter(function(s){return s.status==='sold';}).length,
+    co=slabs.filter(function(s){return s.status==='consigned';}).length,
+    coVal=slabs.filter(function(s){return s.status==='consigned';}).reduce(function(a,s){return a+sv(s);},0),
     iv=slabs.reduce(function(a,s){return a+sv(s);},0),
     svv=slabs.filter(function(s){return s.status==='sold';}).reduce(function(a,s){return a+sv(s);},0),
     ar=invoices.filter(function(i){return i.status!=='paid';}).reduce(function(a,i){return a+(i.total-i.paid);},0),
@@ -1240,7 +1246,7 @@ function calcStats(){
     // Profit calculation
     totalCost=slabs.filter(function(s){return s.cost_per_sqft&&s.status==='sold';}).reduce(function(a,s){return a+(sqft(s)*(s.cost_per_sqft||0));},0),
     profit=svv-totalCost;
-  return{total:t,avail:av,sold:so,inv:iv,soldV:svv,ar:ar,billed:billed,received:received,cost:totalCost,profit:profit};
+  return{total:t,avail:av,sold:so,cons:co,consVal:coVal,inv:iv,soldV:svv,ar:ar,billed:billed,received:received,cost:totalCost,profit:profit};
 }
 function applyReadonlyToRendered(){
   if(!READONLY)return;
@@ -1252,6 +1258,7 @@ function renderStats(){
   document.getElementById('sr').innerHTML=
     '<div class="sc"><div class="sl">Total chapas</div><div class="sv bl">'+s.total+'</div></div>'+
     '<div class="sc"><div class="sl">Disponíveis</div><div class="sv g">'+s.avail+'</div></div>'+
+    '<div class="sc" style="border:.5px solid #85b7eb"><div class="sl" style="color:#185fa5">Consignadas</div><div class="sv" style="color:#185fa5">'+s.cons+'</div><div style="font-size:10px;color:#185fa5;margin-top:2px">'+fmtI(s.consVal)+'</div></div>'+
     '<div class="sc"><div class="sl">Vendidas</div><div class="sv am">'+s.sold+'</div></div>'+
     '<div class="sc"><div class="sl">Valor inventário</div><div class="sv">'+fmtI(s.inv)+'</div></div>'+
     '<div class="sc" style="border:.5px solid #85b7eb"><div class="sl">Total faturado (todas)</div><div class="sv bl">'+fmtI(s.billed)+'</div></div>'+
@@ -1344,14 +1351,17 @@ function renderTable(){
   tb.innerHTML=rows.map(function(s){
     var sf=sqft(s),tv=sv(s),dim=s.width&&s.height?s.width+'"×'+s.height+'"':'—';
     var th='<div style="width:60px;height:50px;background:var(--b3);border-radius:6px;display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:pointer;border:.5px solid var(--br1)" onclick="openD(\'' + s.id + '\')" id="th-'+s.id+'">' + (s.photo ? '<img src="'+s.photo+'" style="width:60px;height:50px;object-fit:cover;border-radius:6px">' : '<span style="font-size:18px" data-load="'+s.id+'">🪨</span>') + '</div>';
-    return'<tr><td>'+th+'</td><td><strong>'+s.lot+'</strong> <span style="color:var(--t2)">#'+s.num+'</span></td>'+
+    var checked=bulkMode&&bulkSel.includes(s.id);
+    var cbCell=bulkMode?'<td style="width:36px;text-align:center;vertical-align:middle"><input type="checkbox" data-sid="'+s.id+'" '+(checked?'checked':'')+' onclick="event.stopPropagation();togBulkSel(this.dataset.sid)" style="width:16px;height:16px;cursor:pointer"></td>':'';
+    return'<tr data-id="'+s.id+'" '+(bulkMode?'onclick="togBulkSel(this.dataset.id)"':'')+' style="'+(checked?'background:var(--hl1,#e8f1fb);':'')+' cursor:pointer">'+
+      cbCell+'<td>'+th+'</td><td><strong>'+s.lot+'</strong> <span style="color:var(--t2)">#'+s.num+'</span></td>'+
       '<td>'+s.material+'</td><td>'+s.type+'</td><td>'+s.location+'</td>'+
       '<td style="white-space:nowrap">'+dim+'</td><td>'+(sf?sf.toFixed(1):'—')+'</td>'+
       '<td>'+(s.price_per_sqft?'$'+s.price_per_sqft:'—')+'</td>'+
       '<td style="white-space:nowrap">'+(tv?fmt(tv):'—')+'</td>'+
       '<td>'+badge(s.status)+'</td>'+
-      '<td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--t2)" title="'+(s.obs||'')+'">'+( s.obs||'')+'</td>'+
-      '<td style="white-space:nowrap"><button class="btn sm" onclick="openD(\''+s.id+'\')" style="margin-right:3px">Ver</button><button class="btn sm" style="color:var(--w);border-color:var(--w)" onclick="dupSlab(\''+s.id+'\')">Dup.</button></td></tr>';
+      '<td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--t2)" title="'+(s.obs||'')+'">'+(s.obs||'')+'</td>'+
+      '<td style="white-space:nowrap"><button class="btn sm" onclick="event.stopPropagation();openD(\''+s.id+'\')" style="margin-right:3px">Ver</button>'+(bulkMode?'':'<button class="btn sm" style="color:var(--w);border-color:var(--w)" onclick="event.stopPropagation();dupSlab(\''+s.id+'\')" >Dup.</button>')+'</td></tr>';
   }).join('');
 }
 
@@ -1544,7 +1554,7 @@ function selectLocVis(loc){
   if(el){el.value=loc;renderVis();}
 }
 
-function renderVis(){
+async function renderVis(){
   document.getElementById('lg').innerHTML=locs.map(function(loc){
     var ls=slabs.filter(function(s){return s.location===loc;});if(!ls.length)return'';
     var av=ls.filter(function(s){return s.status==='available';}).length,so=ls.filter(function(s){return s.status==='sold';}).length;
@@ -1554,21 +1564,41 @@ function renderVis(){
   if(!selLoc){sv2.innerHTML='<div class="empty">Selecione um local acima.</div>';return;}
   var ls=slabs.filter(function(s){return s.location===selLoc||(s.sold_to===selLoc&&s.status==='sold');});
   if(!ls.length){sv2.innerHTML='<div class="empty">Nenhuma chapa neste local.</div>';return;}
+
+  // Pre-load ALL photos for this location before rendering
+  var missing=ls.filter(function(s){return !s.photo;});
+  if(missing.length){
+    sv2.innerHTML='<div style="padding:20px;text-align:center;color:var(--t2)"><span class="sp"></span> Carregando '+missing.length+' fotos...</div>';
+    try{
+      var batches=[];
+      for(var bi=0;bi<missing.length;bi+=80)batches.push(missing.slice(bi,bi+80));
+      var results=await Promise.all(batches.map(function(batch){
+        return fetch(SB+'/rest/v1/slabs?id=in.('+batch.map(function(s){return s.id;}).join(',')+')'+'&select=id,photo',{headers:H})
+          .then(function(r){return r.ok?r.json():[];}).catch(function(){return[];});
+      }));
+      [].concat.apply([],results).forEach(function(row){
+        if(!row.photo)return;
+        var s=slabs.find(function(x){return x.id===row.id;});
+        if(s)s.photo=row.photo;
+      });
+    }catch(e){console.error('photo preload error',e);}
+  }
+
   var lots=[...new Set(ls.map(function(s){return s.lot;}))];
   sv2.innerHTML=lots.map(function(lot){
     var g=ls.filter(function(s){return s.lot===lot;});
     return'<div class="lh">Lote '+lot+' — '+g[0].material+(g[0].type?' ('+g[0].type+')':'')+'</div>'+
       '<div class="sg">'+g.map(function(s){
         var lbl=s.status==='sold'?'✗ Vendida':s.status==='reserved'?'⏳ Reservada':s.status==='consigned'?'⇄ Consignada':'✓ Disponível';
-        var ph=s.photo?'<img class="sph" src="'+s.photo+'">':'<div class="spp" data-load-vis="'+s.id+'">🪨</div>';
+        var ph=s.photo?'<img class="sph" src="'+s.photo+'">':'<div class="spp">🪨</div>';
         return'<div class="st '+s.status+'" onclick="openD(\''+s.id+'\')"><div class="ssb '+s.status+'"></div>'+ph+'<div class="si"><div class="sn">#'+s.num+'</div><div class="ss">'+(sqft(s)?sqft(s).toFixed(1)+' sqft':'—')+'</div><div class="ss">'+lbl+'</div></div></div>';
       }).join('')+'</div></div>';
   }).join('');
 }
+
 function selL(loc){
   selLoc=selLoc===loc?null:loc;
-  renderVis();
-  setTimeout(loadVisibleThumbsVis,200);
+  renderVis().catch(function(e){console.error(e);});
   var btn=document.getElementById('btn-print-visual');
   if(btn)btn.style.display=selLoc?'':'none';
 }
@@ -6524,12 +6554,196 @@ function managePaymentGroup(btn){
   openPaymentModal(invId);
 }
 
+// ── BULK CONSIGN ──────────────────────────────────────
+function toggleBulkMode(){
+  bulkMode = !bulkMode;
+  bulkSel = [];
+  var btn = document.getElementById('btn-bulk-toggle');
+  var btnConsign = document.getElementById('btn-bulk-consign');
+  var btnCancel = document.getElementById('btn-bulk-cancel');
+  var btnLocation = document.getElementById('btn-bulk-location');
+  if(btn) btn.style.display = bulkMode?'none':'';
+  if(btnConsign) btnConsign.style.display = 'none';
+  if(btnLocation) btnLocation.style.display = 'none';
+  if(btnCancel) btnCancel.style.display = bulkMode?'':'none';
+  renderTable();
+}
+
+function cancelBulkSelect(){
+  bulkMode = false;
+  bulkSel = [];
+  document.getElementById('btn-bulk-toggle').style.display = '';
+  document.getElementById('btn-bulk-consign').style.display = 'none';
+  document.getElementById('btn-bulk-location').style.display = 'none';
+  document.getElementById('btn-bulk-cancel').style.display = 'none';
+  renderTable();
+}
+
+function togBulkSel(id){
+  if(bulkSel.includes(id)){
+    bulkSel = bulkSel.filter(function(x){return x!==id;});
+  } else {
+    bulkSel.push(id);
+  }
+  var btn = document.getElementById('btn-bulk-consign');
+  if(btn) btn.style.display = bulkSel.length>0?'':'none';
+  var btnLoc = document.getElementById('btn-bulk-location');
+  if(btnLoc) btnLoc.style.display = bulkSel.length>0?'':'none';
+  renderTable();
+}
+
+function openBulkConsign(){
+  if(!bulkSel.length){alert('Selecione pelo menos uma chapa.');return;}
+  var selSlabs = bulkSel.map(function(id){return slabs.find(function(s){return s.id===id;});}).filter(Boolean);
+  var notAvail = selSlabs.filter(function(s){return s.status!=='available';});
+  if(notAvail.length){
+    if(!confirm(notAvail.length+' chapa(s) não estão disponíveis (vendidas ou já consignadas). Continuar mesmo assim?'))return;
+  }
+
+  // Build client selector modal
+  var existing = document.getElementById('bulk-consign-modal');
+  if(existing) existing.remove();
+
+  var div = document.createElement('div');
+  div.id = 'bulk-consign-modal';
+  div.className = 'mb';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:300';
+
+  var parseC = function(name){var m=name.match(/^(\d+)[Cc](\d{4})/);return m?{year:parseInt(m[2]),num:parseInt(m[1])}:{year:9999,num:9999};};
+  var clientOpts = clients.map(function(c){return '<option value="'+c.name+'">'+c.name+'</option>';}).join('');
+  var locOpts = getAllLocs().map(function(l){return '<option value="'+l+'">'+l+'</option>';}).join('');
+
+  div.innerHTML = '<div class="mo" style="width:min(480px,96vw)">'
+    +'<h3 style="margin:0 0 14px">⇄ Consignar '+selSlabs.length+' chapa(s)</h3>'
+    +'<div style="background:var(--b2);border-radius:var(--r);padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--t2)">'
+    +selSlabs.map(function(s){return s.material+' #'+s.num;}).join(' · ')
+    +'</div>'
+    +'<div class="fi" style="margin-bottom:14px">'
+    +'<label>Destino (empresa / local) *</label>'
+    +'<select id="bulk-consign-dest" style="padding:8px 12px;border:.5px solid var(--br1);border-radius:var(--r);font-size:13px;background:var(--b1);color:var(--t1);width:100%">'
+    +'<option value="">— Selecionar empresa —</option>'
+    +clientOpts+locOpts
+    +'</select>'
+    +'</div>'
+    +'<div style="font-size:12px;color:var(--t2);margin-bottom:14px">As chapas terão status alterado para <strong>Consignada</strong> e o local atualizado para a empresa selecionada.</div>'
+    +'<div class="ma">'
+    +'<button class="btn" onclick="document.getElementById(&quot;bulk-consign-modal&quot;).remove()">Cancelar</button>'
+    +'<button class="btn p" onclick="saveBulkConsign()" style="background:#185fa5;border-color:#185fa5">⇄ Confirmar Consignação</button>'
+    +'</div></div>';
+
+  document.body.appendChild(div);
+  div.addEventListener('click',function(e){if(e.target===div)div.remove();});
+}
+
+async function saveBulkConsign(){
+  var dest = document.getElementById('bulk-consign-dest').value;
+  if(!dest){alert('Selecione o destino.');return;}
+
+  sync('spin','Consignando '+bulkSel.length+' chapas...');
+  try{
+    for(var i=0;i<bulkSel.length;i++){
+      var s = slabs.find(function(x){return x.id===bulkSel[i];});
+      if(!s)continue;
+      s.status = 'consigned';
+      s.location = dest;
+      s.sold_to = null;
+      await sbU('slabs', s.id, {status:'consigned', location:dest, sold_to:null});
+    }
+    sync('ok', bulkSel.length+' chapa(s) consignadas para '+dest);
+    document.getElementById('bulk-consign-modal').remove();
+    cancelBulkSelect();
+    renderStats();
+    renderTable();
+    renderConsignmentSummary();
+  }catch(e){sync('err','Erro');alert(e.message);}
+}
+
+function openBulkLocation(){
+  if(!bulkSel.length){alert('Selecione pelo menos uma chapa.');return;}
+  var selSlabs = bulkSel.map(function(id){return slabs.find(function(s){return s.id===id;});}).filter(Boolean);
+
+  var existing = document.getElementById('bulk-location-modal');
+  if(existing) existing.remove();
+
+  // Build all location options
+  var allLocs = getAllLocs();
+  var locOpts = allLocs.map(function(l){return '<option value="'+l+'">'+l+'</option>';}).join('');
+
+  // Status counts
+  var byStatus = {};
+  selSlabs.forEach(function(s){byStatus[s.status]=(byStatus[s.status]||0)+1;});
+  var statusSummary = Object.keys(byStatus).map(function(k){return byStatus[k]+' '+k;}).join(', ');
+
+  var div = document.createElement('div');
+  div.id = 'bulk-location-modal';
+  div.className = 'mb';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:300';
+  div.innerHTML = '<div class="mo" style="width:min(480px,96vw)">'
+    +'<h3 style="margin:0 0 14px">📍 Mudar local — '+selSlabs.length+' chapa(s)</h3>'
+    +'<div style="background:var(--b2);border-radius:var(--r);padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--t2)">'
+    +selSlabs.map(function(s){return s.material+' #'+s.num;}).join(' · ')
+    +'<div style="margin-top:4px;font-style:italic">Status atual: '+statusSummary+'</div>'
+    +'</div>'
+    +'<div class="fi" style="margin-bottom:10px">'
+    +'<label>Novo local *</label>'
+    +'<select id="bulk-loc-dest" style="padding:8px 12px;border:.5px solid var(--br1);border-radius:var(--r);font-size:13px;background:var(--b1);color:var(--t1);width:100%">'
+    +'<option value="">— Selecionar local —</option>'
+    +locOpts
+    +'</select>'
+    +'</div>'
+    +'<div class="fi" style="margin-bottom:14px">'
+    +'<label>Também alterar status para:</label>'
+    +'<select id="bulk-loc-status" style="padding:8px 12px;border:.5px solid var(--br1);border-radius:var(--r);font-size:13px;background:var(--b1);color:var(--t1);width:100%">'
+    +'<option value="">— Manter status atual —</option>'
+    +'<option value="available">✓ Disponível</option>'
+    +'<option value="consigned">⇄ Consignada</option>'
+    +'<option value="reserved">⏳ Reservada</option>'
+    +'</select>'
+    +'</div>'
+    +'<div style="font-size:12px;color:var(--t2);margin-bottom:14px">Apenas o campo <strong>local</strong> será atualizado. O status só muda se você escolher acima.</div>'
+    +'<div class="ma">'
+    +'<button class="btn" onclick="document.getElementById(&quot;bulk-location-modal&quot;).remove()">Cancelar</button>'
+    +'<button class="btn p" onclick="saveBulkLocation()" style="background:#854f0b;border-color:#854f0b">📍 Confirmar mudança</button>'
+    +'</div></div>';
+
+  document.body.appendChild(div);
+  div.addEventListener('click',function(e){if(e.target===div)div.remove();});
+}
+
+async function saveBulkLocation(){
+  var dest = document.getElementById('bulk-loc-dest').value;
+  if(!dest){alert('Selecione o local de destino.');return;}
+  var newStatus = document.getElementById('bulk-loc-status').value;
+
+  sync('spin','Atualizando '+bulkSel.length+' chapas...');
+  try{
+    for(var i=0;i<bulkSel.length;i++){
+      var s = slabs.find(function(x){return x.id===bulkSel[i];});
+      if(!s)continue;
+      var update = {location:dest};
+      s.location = dest;
+      if(newStatus){
+        update.status = newStatus;
+        s.status = newStatus;
+        if(newStatus!=='sold') { update.sold_to=null; s.sold_to=null; }
+      }
+      await sbU('slabs', s.id, update);
+    }
+    sync('ok', bulkSel.length+' chapa(s) movidas para '+dest);
+    document.getElementById('bulk-location-modal').remove();
+    cancelBulkSelect();
+    renderStats();
+    renderTable();
+    renderConsignmentSummary();
+  }catch(e){sync('err','Erro');alert(e.message);}
+}
+
 function closeM(id){document.getElementById(id).classList.add('hidden');}
 document.querySelectorAll('.mb').forEach(function(m){m.addEventListener('click',function(e){if(e.target===m)m.classList.add('hidden');});});
 function showPage(p){
   ['inventory','visual','invoices','report','clients','containers','financeiro','proforma','transfer','alerts','bills','settings'].forEach(function(pg){document.getElementById('page-'+pg).classList.toggle('hidden',pg!==p);});
   document.querySelectorAll('.nb').forEach(function(b,i){b.classList.toggle('active',['inventory','visual','invoices','report','clients','containers','financeiro','transfer','alerts','bills','settings'][i]===p);});
-  if(p==='visual')renderVis();
+  if(p==='visual'){renderConsignmentSummary();renderVis().catch(function(e){console.error(e)});}
   if(p==='invoices')renderInvoices();
   if(p==='report')renderReport();
   if(p==='clients')renderClientsList();
