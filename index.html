@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -3813,11 +3812,11 @@ function openClientLedger(invIdOrClientName){
     if(!history.length && inv.paid>0){
       // Legacy: no history
       var legKey = 'leg_'+inv.id;
-      payGroups[legKey] = {date:inv.date||'',desc:'Payment received',paid:inv.paid,_ts:inv.date||''};
+      payGroups[legKey] = {date:inv.date||'',desc:'Payment received',paid:inv.paid,_ts:inv.date||'',_payments:[]};
       return;
     }
 
-    history.forEach(function(p){
+    history.forEach(function(p,pi){
       // Group key: batch_id (new) OR date+minute (old)
       var groupKey;
       if(p.batch_id){
