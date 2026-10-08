@@ -507,7 +507,10 @@ body.readonly .mo select { pointer-events:none !important; opacity:0.7; }
     <div id="page-bills" class="hidden">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
         <span style="font-size:13px;color:var(--t2)">Contas e despesas da empresa</span>
-        <button class="btn p readonly-hide" onclick="openBillModal()">+ Nova Conta</button>
+        <div style="display:flex;gap:8px">
+          <button class="btn" onclick="printBillsReport()" style="border-color:#185fa5;color:#185fa5">🖨 Relatório</button>
+          <button class="btn p readonly-hide" onclick="openBillModal()">+ Nova Conta</button>
+        </div>
       </div>
       <div class="sr" id="bills-stats"></div>
       <div id="bills-list"></div>
@@ -2808,6 +2811,107 @@ async function toggleBillPaid(id){if(READONLY)return;
   await saveSetting('bills', bills);
   renderBills();
   renderAlerts();
+}
+
+function printBillsReport(){
+  var today = new Date().toISOString().slice(0,10);
+  var todayFmt = (function(){var d=new Date();return (d.getMonth()+1).toString().padStart(2,'0')+'/'+d.getDate().toString().padStart(2,'0')+'/'+d.getFullYear();})();
+
+  // Filter only pending/overdue bills, sorted by due date
+  var pending = bills.filter(function(b){return b.status!=='paid';})
+    .sort(function(a,b){return (a.due||'').localeCompare(b.due||'');});
+
+  var allBills = bills.slice().sort(function(a,b){
+    // Overdue first, then pending by due date, then paid
+    var aOver = a.status!=='paid' && a.due && a.due<today;
+    var bOver = b.status!=='paid' && b.due && b.due<today;
+    if(aOver && !bOver) return -1;
+    if(!aOver && bOver) return 1;
+    if(a.status==='paid' && b.status!=='paid') return 1;
+    if(a.status!=='paid' && b.status==='paid') return -1;
+    return (a.due||'').localeCompare(b.due||'');
+  });
+
+  var catLabels = {rent:'Aluguel',salary:'Salário',utilities:'Utilidades',insurance:'Seguro',
+    taxes:'Impostos',loan:'Empréstimo',supplier:'Fornecedor',container:'Container',other:'Outros'};
+
+  var totalPending = pending.reduce(function(a,b){return a+b.amount;},0);
+  var totalAll = allBills.reduce(function(a,b){return a+b.amount;},0);
+  var totalPaid = bills.filter(function(b){return b.status==='paid';}).reduce(function(a,b){return a+b.amount;},0);
+  var overdue = pending.filter(function(b){return b.due&&b.due<today;});
+  var totalOverdue = overdue.reduce(function(a,b){return a+b.amount;},0);
+
+  function fmtDate(d){if(!d)return '—';var p=d.split('-');return p.length===3?p[1]+'/'+p[2]+'/'+p[0]:'—';}
+  function fmtAmt(n){return '$'+(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
+
+  var rows = allBills.map(function(b){
+    var isOverdue = b.status!=='paid' && b.due && b.due<today;
+    var statusLabel = b.status==='paid'?'✓ Paga':isOverdue?'⚠ Vencida':'◷ Pendente';
+    var statusColor = b.status==='paid'?'#2a6049':isOverdue?'#c0392b':'#854f0b';
+    var rowBg = isOverdue?'#fff5f5':b.status==='paid'?'#f5fff8':'#fff';
+    return '<tr style="background:'+rowBg+';border-bottom:.5px solid #e8e8e8">'+
+      '<td style="padding:8px 12px;font-size:12px;color:#555;white-space:nowrap">'+fmtDate(b.due)+'</td>'+
+      '<td style="padding:8px 12px;font-size:12px;font-weight:500">'+( b.desc||'—')+'</td>'+
+      '<td style="padding:8px 12px;font-size:12px;color:#666">'+( catLabels[b.cat]||b.cat||'—')+'</td>'+
+      '<td style="padding:8px 12px;font-size:11px;color:'+statusColor+';font-weight:600;white-space:nowrap">'+statusLabel+'</td>'+
+      '<td style="padding:8px 12px;font-size:12px;font-weight:700;text-align:right;color:'+(b.status==='paid'?'#2a6049':isOverdue?'#c0392b':'#1a1a1a')+'">'+fmtAmt(b.amount)+'</td>'+
+    '</tr>';
+  }).join('');
+
+  var summaryCards = [
+    {label:'Total Vencido',value:fmtAmt(totalOverdue),color:'#c0392b',bg:'#fff0f0'},
+    {label:'Total Pendente',value:fmtAmt(totalPending),color:'#854f0b',bg:'#fffbf0'},
+    {label:'Total Pago',value:fmtAmt(totalPaid),color:'#2a6049',bg:'#f0fff8'},
+    {label:'Total Geral',value:fmtAmt(totalAll),color:'#185fa5',bg:'#f0f6ff'},
+  ].map(function(c){
+    return '<div style="flex:1;min-width:130px;background:'+c.bg+';border-radius:8px;padding:14px 18px;text-align:center">'+
+      '<div style="font-size:11px;color:#888;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">'+c.label+'</div>'+
+      '<div style="font-size:18px;font-weight:700;color:'+c.color+'">'+c.value+'</div>'+
+    '</div>';
+  }).join('');
+
+  var html = '<!DOCTYPE html><html><head><meta charset="utf-8">'+
+    '<title>Contas a Pagar — Dilean Marbles Corp</title>'+
+    '<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;color:#1a1a1a;background:#fff;padding:30px}'+
+    '@media print{body{padding:0}.no-print{display:none}}'+
+    'h1{font-size:20px;font-weight:700;margin-bottom:2px}'+
+    '.sub{font-size:12px;color:#888;margin-bottom:20px}'+
+    'table{width:100%;border-collapse:collapse}'+
+    'thead th{background:#f5f5f5;padding:9px 12px;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#555;border-bottom:2px solid #ddd;text-align:left}'+
+    'thead th:last-child{text-align:right}'+
+    'tfoot td{padding:10px 12px;font-size:13px;font-weight:700;border-top:2px solid #ddd}'+
+    '</style></head><body>'+
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px">'+
+      '<div>'+
+        '<div style="font-size:11px;color:#888;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Dilean Marbles Corp</div>'+
+        '<h1>Relatório de Contas a Pagar</h1>'+
+        '<div class="sub">Gerado em '+todayFmt+' · '+allBills.length+' conta(s)</div>'+
+      '</div>'+
+      '<button class="no-print" onclick="window.print()" style="padding:8px 20px;background:#185fa5;color:#fff;border:none;border-radius:6px;font-size:13px;cursor:pointer;font-weight:600">🖨 Imprimir PDF</button>'+
+    '</div>'+
+    '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:24px">'+summaryCards+'</div>'+
+    '<table>'+
+      '<thead><tr>'+
+        '<th style="width:100px">Vencimento</th>'+
+        '<th>Descrição</th>'+
+        '<th style="width:120px">Categoria</th>'+
+        '<th style="width:100px">Status</th>'+
+        '<th style="width:120px;text-align:right">Valor</th>'+
+      '</tr></thead>'+
+      '<tbody>'+rows+'</tbody>'+
+      '<tfoot><tr>'+
+        '<td colspan="4" style="text-align:right;color:#555">TOTAL PENDENTE</td>'+
+        '<td style="text-align:right;color:#854f0b;font-size:15px">'+fmtAmt(totalPending)+'</td>'+
+      '</tr></tfoot>'+
+    '</table>'+
+    '<div style="margin-top:30px;font-size:10px;color:#aaa;text-align:center;border-top:1px solid #eee;padding-top:12px">'+
+      'Dilean Marbles Corp · 1661 E Sample Rd, Pompano Beach FL 33064 · (346) 455-8150'+
+    '</div>'+
+    '</body></html>';
+
+  var w = window.open('','_blank');
+  w.document.write(html);
+  w.document.close();
 }
 
 function renderBills(){
