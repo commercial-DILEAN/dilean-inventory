@@ -5454,7 +5454,7 @@ function genPackingList(prefill){
       '<div class="fi"><label>Packing List No.</label><input id="pl-num" value="'+(prefill&&prefill.num?prefill.num:'PL-'+new Date().toISOString().slice(2,10).replace(/-/g,''))+'"></div>'+
       '<div class="fi"><label>Date</label><input id="pl-date" type="date" value="'+(prefill&&prefill.date?prefill.date:new Date().toISOString().slice(0,10))+'"></div>'+
       '<div class="fi"><label>Shipper</label><input id="pl-shipper" value="DILEAN MARBLES CORP"></div>'+
-      '<div class="fi"><label>Consignee</label><input id="pl-consignee" value="'+(prefill&&prefill.consignee?prefill.consignee:'Container Dilean')+'"></div>'+
+      '<div class="fi"><label>Container Dilean Number</label><input id="pl-consignee" placeholder="ex: 9C2026" value="'+(prefill&&prefill.consignee?prefill.consignee:'')+'"></div>'+
       '<div class="fi"><label>Vessel / Truck / Flight</label><input id="pl-vessel" placeholder="ex: MSC OSCAR" value="'+(prefill&&prefill.vessel?prefill.vessel:'')+'"></div>'+
       '<div class="fi"><label>Port of Loading</label><input id="pl-pol" placeholder="ex: Houston, TX" value="'+(prefill&&prefill.pol?prefill.pol:'')+'"></div>'+
       '<div class="fi"><label>Port of Discharge</label><input id="pl-pod" placeholder="ex: Santos, Brasil" value="'+(prefill&&prefill.pod?prefill.pod:'')+'"></div>'+
@@ -5578,7 +5578,7 @@ async function printPackingList(){
         '<div style="font-size:12px;font-weight:600">'+shipper+'</div>'+
       '</div>'+
       '<div style="border:.5px solid #b0c8eb;border-radius:5px;padding:8px 12px">'+
-        '<div style="font-size:9px;font-weight:700;color:#185fa5;text-transform:uppercase;margin-bottom:4px">Consignee</div>'+
+        '<div style="font-size:9px;font-weight:700;color:#185fa5;text-transform:uppercase;margin-bottom:4px">Container Dilean Number</div>'+
         '<div style="font-size:12px;font-weight:600">'+consignee+'</div>'+
       '</div>'+
     '</div>'+
