@@ -199,9 +199,13 @@ body.readonly .mo select { pointer-events:none !important; opacity:0.7; }
           <option value="available">Disponível</option><option value="sold">Vendida</option>
           <option value="reserved">Reservada</option><option value="consigned">Consignada</option>
         </select>
+        <select id="fc" onchange="renderTable()" style="max-width:160px"><option value="">Container: todos</option></select>
         <button class="btn p readonly-hide" onclick="openSM()">+ Nova Chapa</button>
         <button class="btn readonly-hide" id="btn-bulk-consign" onclick="openBulkConsign()" style="display:none;border-color:#185fa5;color:#185fa5">⇄ Consignar selecionadas</button>
         <button class="btn readonly-hide" id="btn-bulk-location" onclick="openBulkLocation()" style="display:none;border-color:#854f0b;color:#854f0b">📍 Mudar local</button>
+        <button class="btn" id="btn-bulk-packing" onclick="openBulkPackingList()" style="display:none;border-color:#2a6049;color:#2a6049">📦 Packing List</button>
+        <button class="btn" id="btn-bulk-transfer" onclick="openBulkTransfer()" style="display:none;border-color:#5a3b8a;color:#5a3b8a">🚚 Transfer</button>
+        <button class="btn" id="btn-bulk-report" onclick="openBulkReport()" style="display:none;border-color:#555;color:#555">📋 Relatório</button>
         <button class="btn" id="btn-bulk-cancel" onclick="cancelBulkSelect()" style="display:none">✕ Cancelar seleção</button>
         <button class="btn" onclick="toggleBulkMode()" id="btn-bulk-toggle" style="border-color:#185fa5;color:#185fa5">☐ Selecionar chapas</button>
         <div style="display:flex;gap:6px;align-items:center">
@@ -563,8 +567,9 @@ body.readonly .mo select { pointer-events:none !important; opacity:0.7; }
       <div class="fi"><label>Nº Chapa *</label><input id="fn"></div>
       <div class="fi" style="position:relative"><label>Material *</label><input id="fmat" oninput="updateMS()" autocomplete="off"><div id="ms" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--b1);border:.5px solid var(--br2);border-radius:var(--r);z-index:300;box-shadow:0 4px 12px rgba(0,0,0,.15)"></div></div>
       <div class="fi"><label>Tipo</label><select id="fty"><option>Quartzito</option><option>Mármore</option><option>Granito</option><option>Quartzo</option><option>Outro</option></select></div>
-      <div class="fi"><label>Largura (pol)</label><input id="fw" type="number" min="0" step="0.1"></div>
+      <div class="fi"><label>Altura (pol)</label><input id="fw" type="number" min="0" step="0.1"></div>
       <div class="fi"><label>Comprimento (pol)</label><input id="fh" type="number" min="0" step="0.1"></div>
+      <div class="fi"><label>Espessura / Thickness (cm)</label><input id="fthk" type="number" min="0" step="0.5" placeholder="ex: 2, 3"></div>
       <div class="fi"><label>Local</label>
         <div style="display:flex;gap:6px">
           <select id="floc" style="flex:1;padding:7px 10px;border:.5px solid var(--br2);border-radius:var(--r);font-size:13px;background:var(--b1);color:var(--t1)"></select>
@@ -1150,6 +1155,9 @@ async function saveClient(){if(READONLY)return;
     // adiciona como local automaticamente
     if(locs.indexOf(name)===-1){locs.push(name);}
   }
+  // Sort alphabetically
+  clients.sort(function(a,b){return (a.name||'').localeCompare(b.name||'');});
+  locs.sort(function(a,b){return a.localeCompare(b);});
   sync('spin','Salvando...');
   await Promise.all([saveSetting('clients',clients),saveSetting('locations',locs)]);
   sync('ok','Salvo');
@@ -1201,7 +1209,7 @@ function getAllLocs(){
   return all;
 }
 function rebuildSels(){
-  var allLocs=getAllLocs();
+  var allLocs=getAllLocs().slice().sort(function(a,b){return a.localeCompare(b);});
   ['fl','floc','ifl'].forEach(function(id){
     var el=document.getElementById(id);if(!el)return;
     var cur=el.value;
@@ -1211,6 +1219,15 @@ function rebuildSels(){
     allLocs.forEach(function(l){var o=document.createElement('option');o.value=l;o.textContent=l;el.appendChild(o);});
     if(cur)el.value=cur;
   });
+  // Populate container filter in slabs
+  var fc=document.getElementById('fc');
+  if(fc){
+    var curFc=fc.value;
+    fc.innerHTML='<option value="">Container: todos</option>';
+    var sortedC=containers.slice().sort(function(a,b){return (a.name||'').localeCompare(b.name||'');});
+    sortedC.forEach(function(c){var o=document.createElement('option');o.value=c.id;o.textContent=c.name+(c.desc?' — '+c.desc:'');fc.appendChild(o);});
+    if(curFc)fc.value=curFc;
+  }
   var ms=document.getElementById('fm');var cm=ms?ms.value:'';
   if(ms){ms.innerHTML='<option value="">Todos os materiais</option>';getMats().forEach(function(m){var o=document.createElement('option');o.value=m;o.textContent=m;ms.appendChild(o);});if(cm)ms.value=cm;}
   rebuildClientSel();
@@ -1274,10 +1291,12 @@ function filteredSlabs(){
   var q=(document.getElementById('qi').value||'').toLowerCase(),
     mat=document.getElementById('fm').value,
     loc=document.getElementById('fl').value,
-    st=document.getElementById('fs').value;
+    st=document.getElementById('fs').value,
+    fc=document.getElementById('fc')?document.getElementById('fc').value:'';
   return slabs.filter(function(s){
     var txt=[s.lot,s.num,s.material,s.type,s.location,s.obs,s.sold_to].join(' ').toLowerCase();
-    return(!q||txt.includes(q))&&(!mat||s.material===mat)&&(!loc||s.location===loc)&&(!st||s.status===st);
+    var contOk = !fc || s.container_id===fc;
+    return(!q||txt.includes(q))&&(!mat||s.material===mat)&&(!loc||s.location===loc)&&(!st||s.status===st)&&contOk;
   });
 }
 async function loadVisibleThumbsVis(){
@@ -1384,7 +1403,7 @@ function openSM(id){if(READONLY)return;
   document.getElementById('smt').textContent=s?'Editar Chapa':'Nova Chapa';
   document.getElementById('fl2').value=s?s.lot:'';document.getElementById('fn').value=s?s.num:'';
   document.getElementById('fmat').value=s?s.material:'';document.getElementById('fty').value=s?s.type:'Quartzito';
-  document.getElementById('fw').value=s?s.width:'';document.getElementById('fh').value=s?s.height:'';
+  document.getElementById('fw').value=s?s.width:'';document.getElementById('fh').value=s?s.height:'';document.getElementById('fthk').value=s&&s.thickness?s.thickness:'';
   document.getElementById('floc').value=s?s.location:locs[0];document.getElementById('fp').value=s?s.price_per_sqft:'';
   if(document.getElementById('fc'))document.getElementById('fc').value=s&&s.cost_per_sqft?s.cost_per_sqft:'';
   document.getElementById('fst').value=s?s.status:'available';
@@ -1400,7 +1419,7 @@ async function saveSlab(){if(READONLY)return;
   if(!lot||!num||!mat){alert('Lote, número e material são obrigatórios.');return;}
   var btn=document.getElementById('ssb');btn.textContent='Salvando...';btn.disabled=true;
   var d={id:editId||uid(),lot:lot,num:num,material:mat,type:document.getElementById('fty').value,
-    width:parseFloat(document.getElementById('fw').value)||null,height:parseFloat(document.getElementById('fh').value)||null,
+    width:parseFloat(document.getElementById('fw').value)||null,height:parseFloat(document.getElementById('fh').value)||null,thickness:parseFloat(document.getElementById('fthk').value)||null,
     location:document.getElementById('floc').value,price_per_sqft:parseFloat(document.getElementById('fp').value)||null,
     cost_per_sqft:parseFloat(document.getElementById('fc')?document.getElementById('fc').value:0)||null,
     status:document.getElementById('fst').value,
@@ -5435,7 +5454,7 @@ function genPackingList(prefill){
       '<div class="fi"><label>Packing List No.</label><input id="pl-num" value="'+(prefill&&prefill.num?prefill.num:'PL-'+new Date().toISOString().slice(2,10).replace(/-/g,''))+'"></div>'+
       '<div class="fi"><label>Date</label><input id="pl-date" type="date" value="'+(prefill&&prefill.date?prefill.date:new Date().toISOString().slice(0,10))+'"></div>'+
       '<div class="fi"><label>Shipper</label><input id="pl-shipper" value="DILEAN MARBLES CORP"></div>'+
-      '<div class="fi"><label>Consignee</label><input id="pl-consignee" value="'+(prefill&&prefill.consignee?prefill.consignee:toName)+'"></div>'+
+      '<div class="fi"><label>Consignee</label><input id="pl-consignee" value="'+(prefill&&prefill.consignee?prefill.consignee:'Container Dilean')+'"></div>'+
       '<div class="fi"><label>Vessel / Truck / Flight</label><input id="pl-vessel" placeholder="ex: MSC OSCAR" value="'+(prefill&&prefill.vessel?prefill.vessel:'')+'"></div>'+
       '<div class="fi"><label>Port of Loading</label><input id="pl-pol" placeholder="ex: Houston, TX" value="'+(prefill&&prefill.pol?prefill.pol:'')+'"></div>'+
       '<div class="fi"><label>Port of Discharge</label><input id="pl-pod" placeholder="ex: Santos, Brasil" value="'+(prefill&&prefill.pod?prefill.pod:'')+'"></div>'+
@@ -6704,9 +6723,15 @@ function toggleBulkMode(){
   var btnConsign = document.getElementById('btn-bulk-consign');
   var btnCancel = document.getElementById('btn-bulk-cancel');
   var btnLocation = document.getElementById('btn-bulk-location');
+  var btnPacking = document.getElementById('btn-bulk-packing');
+  var btnTransfer = document.getElementById('btn-bulk-transfer');
+  var btnReport = document.getElementById('btn-bulk-report');
   if(btn) btn.style.display = bulkMode?'none':'';
   if(btnConsign) btnConsign.style.display = 'none';
   if(btnLocation) btnLocation.style.display = 'none';
+  if(btnPacking) btnPacking.style.display = 'none';
+  if(btnTransfer) btnTransfer.style.display = 'none';
+  if(btnReport) btnReport.style.display = 'none';
   if(btnCancel) btnCancel.style.display = bulkMode?'':'none';
   renderTable();
 }
@@ -6717,6 +6742,7 @@ function cancelBulkSelect(){
   document.getElementById('btn-bulk-toggle').style.display = '';
   document.getElementById('btn-bulk-consign').style.display = 'none';
   document.getElementById('btn-bulk-location').style.display = 'none';
+  ['btn-bulk-packing','btn-bulk-transfer','btn-bulk-report'].forEach(function(id){var e=document.getElementById(id);if(e)e.style.display='none';});
   document.getElementById('btn-bulk-cancel').style.display = 'none';
   renderTable();
 }
@@ -6731,6 +6757,10 @@ function togBulkSel(id){
   if(btn) btn.style.display = bulkSel.length>0?'':'none';
   var btnLoc = document.getElementById('btn-bulk-location');
   if(btnLoc) btnLoc.style.display = bulkSel.length>0?'':'none';
+  var bp=document.getElementById('btn-bulk-packing'),bt=document.getElementById('btn-bulk-transfer'),br=document.getElementById('btn-bulk-report');
+  if(bp)bp.style.display=bulkSel.length>0?'':'none';
+  if(bt)bt.style.display=bulkSel.length>0?'':'none';
+  if(br)br.style.display=bulkSel.length>0?'':'none';
   renderTable();
 }
 
@@ -6798,6 +6828,91 @@ async function saveBulkConsign(){
     renderTable();
     renderConsignmentSummary();
   }catch(e){sync('err','Erro');alert(e.message);}
+}
+
+function openBulkPackingList(){
+  if(!bulkSel.length){alert('Selecione chapas primeiro.');return;}
+  // Pre-fill trSelIds with selected slabs then open packing list
+  trSelIds = bulkSel.slice();
+  showPage('transfer');
+  setTimeout(function(){
+    genPackingList();
+  },200);
+}
+
+function openBulkTransfer(){
+  if(!bulkSel.length){alert('Selecione chapas primeiro.');return;}
+  // Pre-fill trSelIds then open transfer form
+  trSelIds = bulkSel.slice();
+  showPage('transfer');
+  setTimeout(function(){
+    printTransfer();
+  },200);
+}
+
+function openBulkReport(){
+  if(!bulkSel.length){alert('Selecione chapas primeiro.');return;}
+  var selSlabs = bulkSel.map(function(id){return slabs.find(function(s){return s.id===id;});}).filter(Boolean);
+  var containerName = '';
+  var fc = document.getElementById('fc');
+  if(fc&&fc.value){
+    var cont = containers.find(function(c){return c.id===fc.value;});
+    if(cont) containerName = cont.num;
+  }
+  printSlabsReport(selSlabs, containerName);
+}
+
+function printSlabsReport(selSlabs, title){
+  var todayFmt=(function(){var d=new Date();return (d.getMonth()+1).toString().padStart(2,'0')+'/'+d.getDate().toString().padStart(2,'0')+'/'+d.getFullYear();})();
+  var totalSqft = selSlabs.reduce(function(a,s){return a+sqft(s);},0);
+  var totalVal = selSlabs.reduce(function(a,s){return a+sv(s);},0);
+  var totalCost = selSlabs.reduce(function(a,s){return a+(sqft(s)*(s.cost_per_sqft||0));},0);
+
+  // Group by lot
+  var byLot = {};
+  selSlabs.forEach(function(s){
+    var key = s.lot||'—';
+    if(!byLot[key]) byLot[key]={lot:key,material:s.material,type:s.type,slabs:[]};
+    byLot[key].slabs.push(s);
+  });
+
+  var rows = Object.values(byLot).map(function(g){
+    var slabRows = g.slabs.map(function(s){
+      var dim = (s.width&&s.height)?s.width+'"×'+s.height+'"':'—';
+      var thk = s.thickness?s.thickness+'cm':'—';
+      return '<tr><td style="padding:5px 10px;font-size:11px">'+s.num+'</td>'+
+        '<td style="padding:5px 10px;font-size:11px">'+thk+'</td>'+
+        '<td style="padding:5px 10px;font-size:11px">'+dim+'</td>'+
+        '<td style="padding:5px 10px;font-size:11px;text-align:right">'+(sqft(s)?sqft(s).toFixed(2):'—')+'</td>'+
+        '<td style="padding:5px 10px;font-size:11px;text-align:right">'+(sv(s)?'$'+sv(s).toFixed(2):'—')+'</td>'+
+        '<td style="padding:5px 10px;font-size:11px;color:#666">'+(s.status==='sold'?'Vendida':s.status==='consigned'?'Consignada':s.status==='reserved'?'Reservada':'Disponível')+'</td>'+
+      '</tr>';
+    }).join('');
+    var lotSqft = g.slabs.reduce(function(a,s){return a+sqft(s);},0);
+    return '<tr style="background:#f0f4f8"><td colspan="6" style="padding:8px 10px;font-size:12px;font-weight:700">Lote '+g.lot+' — '+g.material+' ('+g.type+') — '+g.slabs.length+' chapas / '+lotSqft.toFixed(1)+' sqft</td></tr>'+slabRows;
+  }).join('');
+
+  var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Relatório de Chapas</title>'+
+    '<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;color:#1a1a1a;padding:30px}'+
+    '@media print{.no-print{display:none}}table{width:100%;border-collapse:collapse}'+
+    'thead th{background:#1a1a1a;color:#fff;padding:8px 10px;font-size:11px;text-align:left}'+
+    'tbody tr:hover{background:#f9f9f9}tfoot td{border-top:2px solid #333;padding:8px 10px;font-weight:700;font-size:12px}'+
+    '</style></head><body>'+
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px">'+
+      '<div><div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Dilean Marbles Corp</div>'+
+      '<h1 style="font-size:20px;font-weight:700;margin-bottom:2px">Relatório de Chapas'+(title?' — '+title:'')+'</h1>'+
+      '<div style="font-size:12px;color:#888">'+todayFmt+' · '+selSlabs.length+' chapas · '+totalSqft.toFixed(1)+' sqft</div></div>'+
+      '<button class="no-print" onclick="window.print()" style="padding:8px 20px;background:#1a1a1a;color:#fff;border:none;border-radius:6px;font-size:13px;cursor:pointer">🖨 Imprimir PDF</button>'+
+    '</div>'+
+    '<table><thead><tr><th>#</th><th>Espessura</th><th>Dimensões</th><th style="text-align:right">Sqft</th><th style="text-align:right">Valor</th><th>Status</th></tr></thead>'+
+    '<tbody>'+rows+'</tbody>'+
+    '<tfoot><tr><td colspan="3" style="text-align:right;color:#555">TOTAL</td>'+
+      '<td style="text-align:right">'+totalSqft.toFixed(1)+'</td>'+
+      '<td style="text-align:right;color:#185fa5">$'+totalVal.toFixed(2)+'</td>'+
+      '<td></td></tr></tfoot></table>'+
+    '<div style="margin-top:20px;font-size:10px;color:#aaa;text-align:center;border-top:1px solid #eee;padding-top:10px">Dilean Marbles Corp · 1661 E Sample Rd, Pompano Beach FL 33064</div>'+
+    '</body></html>';
+  var w=window.open('','_blank');w.document.write(html);w.document.close();
 }
 
 function openBulkLocation(){
