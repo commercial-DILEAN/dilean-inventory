@@ -153,10 +153,33 @@ body.readonly .mo select { pointer-events:none !important; opacity:0.7; }
 </style>
 </head>
 <body>
+
+<!-- ── LOGIN SCREEN ────────────────────────────────── -->
+<div id="login-screen" style="display:none;position:fixed;inset:0;z-index:99999;background:linear-gradient(135deg,#0d1f35 0%,#1a3a5c 100%);display:flex;align-items:center;justify-content:center;flex-direction:column">
+  <div style="text-align:center;margin-bottom:28px">
+    <div style="font-size:36px;margin-bottom:8px">🪨</div>
+    <div style="color:#fff;font-size:20px;font-weight:700;letter-spacing:.04em">Dilean Marbles</div>
+    <div style="color:#8ab4d4;font-size:12px;margin-top:4px;letter-spacing:.06em;text-transform:uppercase">Inventory System</div>
+  </div>
+  <div style="background:rgba(255,255,255,.07);border:.5px solid rgba(255,255,255,.15);border-radius:12px;padding:28px 32px;width:300px;max-width:90vw">
+    <div id="login-err" style="display:none;background:rgba(220,50,50,.15);border:.5px solid rgba(220,50,50,.4);color:#f88;border-radius:6px;padding:8px 12px;font-size:12px;margin-bottom:14px;text-align:center">Usuário ou senha incorretos</div>
+    <div style="margin-bottom:14px">
+      <label style="color:#8ab4d4;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:6px">Usuário</label>
+      <input id="login-user" type="text" autocomplete="username" placeholder="seu usuário" style="width:100%;padding:10px 12px;border-radius:7px;border:.5px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:#fff;font-size:14px;outline:none;box-sizing:border-box" onkeydown="if(event.key==='Enter')document.getElementById('login-pass').focus()">
+    </div>
+    <div style="margin-bottom:20px">
+      <label style="color:#8ab4d4;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:6px">Senha</label>
+      <input id="login-pass" type="password" autocomplete="current-password" placeholder="sua senha" style="width:100%;padding:10px 12px;border-radius:7px;border:.5px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:#fff;font-size:14px;outline:none;box-sizing:border-box" onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <button onclick="doLogin()" style="width:100%;padding:11px;background:#185fa5;color:#fff;border:none;border-radius:7px;font-size:14px;font-weight:600;cursor:pointer;letter-spacing:.02em">Entrar</button>
+  </div>
+  <div style="color:rgba(255,255,255,.2);font-size:10px;margin-top:24px">© Dilean Marbles Corp</div>
+</div>
+
 <div id="readonly-banner" style="display:none;background:#185fa5;color:#fff;text-align:center;padding:8px 16px;font-size:13px;font-weight:600;position:sticky;top:0;z-index:9999;letter-spacing:.03em">
   👁 MODO VISUALIZAÇÃO — Acesso somente leitura. Nenhuma alteração pode ser feita.
 </div>
-<div class="app">
+<div class="app" style="display:none" id="main-app">
   <div class="topbar">
     <div class="logo">🪨 Dilean Marbles — Inventory</div>
     <div class="nav">
@@ -941,7 +964,88 @@ body.readonly .mo select { pointer-events:none !important; opacity:0.7; }
 
 <script>
 // ── READ-ONLY MODE ───────────────────────────────────
-var READONLY = new URLSearchParams(window.location.search).get('readonly')==='1';
+// ── LOGIN / AUTH ─────────────────────────────────────────
+// Credentials: change passwords here as needed
+var USERS = {
+  'thiery':  { pass: 'dilean@2024', role: 'admin' },
+  'chefe':   { pass: 'visual@2024', role: 'visual' }
+};
+var SESSION_KEY = 'dlm_auth';
+var currentRole = null;
+
+function checkSession(){
+  try{
+    var s = sessionStorage.getItem(SESSION_KEY);
+    if(s){ var d=JSON.parse(s); if(USERS[d.user]&&d.role===USERS[d.user].role){currentRole=d.role;return true;} }
+  }catch(e){}
+  return false;
+}
+function doLogin(){
+  var u=(document.getElementById('login-user').value||'').trim().toLowerCase();
+  var p=document.getElementById('login-pass').value||'';
+  var err=document.getElementById('login-err');
+  if(USERS[u]&&USERS[u].pass===p){
+    currentRole=USERS[u].role;
+    try{sessionStorage.setItem(SESSION_KEY,JSON.stringify({user:u,role:currentRole}));}catch(e){}
+    err.style.display='none';
+    startApp();
+  } else {
+    err.style.display='block';
+    document.getElementById('login-pass').value='';
+    document.getElementById('login-pass').focus();
+  }
+}
+function doLogout(){
+  try{sessionStorage.removeItem(SESSION_KEY);}catch(e){}
+  currentRole=null;
+  location.reload();
+}
+function startApp(){
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('main-app').style.display='';
+  var VISUAL_ONLY = currentRole==='visual';
+  // Set READONLY based on role
+  if(VISUAL_ONLY){
+    READONLY=true;
+    document.body.classList.add('readonly');
+    document.getElementById('readonly-banner').style.display='none'; // hide banner for visual mode — they know it's view only
+    // Hide all nav tabs except Visual
+    document.querySelectorAll('.nb').forEach(function(b){b.style.display='none';});
+    var tabs=['inventory','visual','invoices','report','clients','containers','financeiro','transfer','alerts','bills','settings'];
+    var visBtn=document.querySelector('.nb[onclick*="visual"]');
+    if(visBtn){visBtn.style.display='';visBtn.classList.add('active');}
+    // Add logout button to topbar
+    var tb=document.querySelector('.topbar');
+    if(tb){
+      var lb=document.createElement('button');
+      lb.className='btn';lb.textContent='Sair';lb.style.cssText='font-size:12px;padding:5px 12px;';
+      lb.onclick=doLogout;
+      tb.appendChild(lb);
+    }
+    init().then(function(){showPage('visual');});
+  } else {
+    // Admin: add logout button
+    var tb=document.querySelector('.topbar');
+    if(tb){
+      var lb=document.createElement('button');
+      lb.className='btn';lb.textContent='Sair';lb.style.cssText='font-size:12px;padding:5px 12px;';
+      lb.onclick=doLogout;
+      tb.appendChild(lb);
+    }
+    init();
+  }
+}
+
+// Show login screen or start directly if session valid
+window.addEventListener('DOMContentLoaded',function(){
+  if(checkSession()){
+    startApp();
+  } else {
+    document.getElementById('login-screen').style.display='flex';
+  }
+});
+
+var READONLY = false; // controlled by login role now
 
 var SB='https://plsgcaiqmltljytchvvt.supabase.co';
 var SK='sb_publishable_QexQ4PIBOved8ajDR42xqQ_UbzeLhYL';
@@ -7013,7 +7117,7 @@ function showPage(p){
   if(p==='settings')loadSettingsForm();
 }
 
-init();
+// init() is now called by startApp() after login
 </script>
 </body>
 </html>
