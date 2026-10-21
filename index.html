@@ -224,6 +224,7 @@ body.readonly .mo select { pointer-events:none !important; opacity:0.7; }
         </select>
         <select id="fc" onchange="renderTable()" style="max-width:160px"><option value="">Container: todos</option></select>
         <button class="btn p readonly-hide" onclick="openSM()">+ Nova Chapa</button>
+        <button class="btn readonly-hide" id="btn-bulk-edit" onclick="openBulkEdit()" style="display:none;border-color:#2a6049;color:#2a6049">✏ Editar campos</button>
         <button class="btn readonly-hide" id="btn-bulk-consign" onclick="openBulkConsign()" style="display:none;border-color:#185fa5;color:#185fa5">⇄ Consignar selecionadas</button>
         <button class="btn readonly-hide" id="btn-bulk-location" onclick="openBulkLocation()" style="display:none;border-color:#854f0b;color:#854f0b">📍 Mudar local</button>
         <button class="btn" id="btn-bulk-packing" onclick="openBulkPackingList()" style="display:none;border-color:#2a6049;color:#2a6049">📦 Packing List</button>
@@ -6840,7 +6841,9 @@ function toggleBulkMode(){
   var btnPacking = document.getElementById('btn-bulk-packing');
   var btnTransfer = document.getElementById('btn-bulk-transfer');
   var btnReport = document.getElementById('btn-bulk-report');
+  var btnBulkEdit = document.getElementById('btn-bulk-edit');
   if(btn) btn.style.display = bulkMode?'none':'';
+  if(btnBulkEdit) btnBulkEdit.style.display = 'none';
   if(btnConsign) btnConsign.style.display = 'none';
   if(btnLocation) btnLocation.style.display = 'none';
   if(btnPacking) btnPacking.style.display = 'none';
@@ -6854,6 +6857,7 @@ function cancelBulkSelect(){
   bulkMode = false;
   bulkSel = [];
   document.getElementById('btn-bulk-toggle').style.display = '';
+  var bedit=document.getElementById('btn-bulk-edit');if(bedit)bedit.style.display='none';
   document.getElementById('btn-bulk-consign').style.display = 'none';
   document.getElementById('btn-bulk-location').style.display = 'none';
   ['btn-bulk-packing','btn-bulk-transfer','btn-bulk-report'].forEach(function(id){var e=document.getElementById(id);if(e)e.style.display='none';});
@@ -6869,6 +6873,8 @@ function togBulkSel(id){
   }
   var btn = document.getElementById('btn-bulk-consign');
   if(btn) btn.style.display = bulkSel.length>0?'':'none';
+  var btnBE = document.getElementById('btn-bulk-edit');
+  if(btnBE) btnBE.style.display = bulkSel.length>0?'':'none';
   var btnLoc = document.getElementById('btn-bulk-location');
   if(btnLoc) btnLoc.style.display = bulkSel.length>0?'':'none';
   var bp=document.getElementById('btn-bulk-packing'),bt=document.getElementById('btn-bulk-transfer'),br=document.getElementById('btn-bulk-report');
@@ -6876,6 +6882,103 @@ function togBulkSel(id){
   if(bt)bt.style.display=bulkSel.length>0?'':'none';
   if(br)br.style.display=bulkSel.length>0?'':'none';
   renderTable();
+}
+
+function openBulkEdit(){
+  if(!bulkSel.length){alert('Select at least one slab first.');return;}
+  var selSlabs = bulkSel.map(function(id){return slabs.find(function(s){return s.id===id;});}).filter(Boolean);
+  var existing = document.getElementById('bulk-edit-modal');
+  if(existing) existing.remove();
+
+  // Build location options
+  var locOpts = '<option value="">— no change —</option>'+locs.map(function(l){return'<option value="'+l+'">'+l+'</option>';}).join('');
+
+  var div = document.createElement('div');
+  div.id = 'bulk-edit-modal';
+  div.style.cssText = 'position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;padding:16px';
+  div.innerHTML =
+    '<div style="background:var(--b1);border-radius:var(--rl);padding:24px;max-width:480px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.3)">'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">'
+    +'<div><div style="font-size:16px;font-weight:700">✏ Editar em massa</div>'
+    +'<div style="font-size:12px;color:var(--t2);margin-top:2px">'+selSlabs.length+' chapa(s) selecionada(s) — preencha apenas os campos que quer alterar</div></div>'
+    +'<button onclick="document.getElementById(\'bulk-edit-modal\').remove()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--t2)">✕</button>'
+    +'</div>'
+    // Material
+    +'<div style="margin-bottom:12px"><label style="font-size:12px;font-weight:600;color:var(--t2);display:block;margin-bottom:4px">MATERIAL</label>'
+    +'<input id="be-material" placeholder="— no change —" style="width:100%;padding:8px 10px;border:.5px solid var(--br2);border-radius:var(--r);font-size:13px;background:var(--b1);color:var(--t1)"></div>'
+    // Type
+    +'<div style="margin-bottom:12px"><label style="font-size:12px;font-weight:600;color:var(--t2);display:block;margin-bottom:4px">TYPE</label>'
+    +'<select id="be-type" style="width:100%;padding:8px 10px;border:.5px solid var(--br2);border-radius:var(--r);font-size:13px;background:var(--b1);color:var(--t1)">'
+    +'<option value="">— no change —</option><option>Quartzito</option><option>Mármore</option><option>Granito</option><option>Quartzo</option><option>Outro</option>'
+    +'</select></div>'
+    // Thickness
+    +'<div style="margin-bottom:12px"><label style="font-size:12px;font-weight:600;color:var(--t2);display:block;margin-bottom:4px">THICKNESS (cm)</label>'
+    +'<input id="be-thickness" type="number" min="0" step="0.5" placeholder="— no change —" style="width:100%;padding:8px 10px;border:.5px solid var(--br2);border-radius:var(--r);font-size:13px;background:var(--b1);color:var(--t1)"></div>'
+    // Finish
+    +'<div style="margin-bottom:12px"><label style="font-size:12px;font-weight:600;color:var(--t2);display:block;margin-bottom:4px">FINISH</label>'
+    +'<select id="be-finish" style="width:100%;padding:8px 10px;border:.5px solid var(--br2);border-radius:var(--r);font-size:13px;background:var(--b1);color:var(--t1)">'
+    +'<option value="">— no change —</option><option>Polished</option><option>Honed</option><option>Brushed</option><option>Leathered</option><option>Sandblasted</option><option>Flamed</option><option>Other</option>'
+    +'</select></div>'
+    // Location
+    +'<div style="margin-bottom:12px"><label style="font-size:12px;font-weight:600;color:var(--t2);display:block;margin-bottom:4px">LOCATION</label>'
+    +'<select id="be-location" style="width:100%;padding:8px 10px;border:.5px solid var(--br2);border-radius:var(--r);font-size:13px;background:var(--b1);color:var(--t1)">'+locOpts+'</select></div>'
+    // Price
+    +'<div style="margin-bottom:12px"><label style="font-size:12px;font-weight:600;color:var(--t2);display:block;margin-bottom:4px">PRICE / SQFT ($)</label>'
+    +'<input id="be-price" type="number" min="0" step="0.01" placeholder="— no change —" style="width:100%;padding:8px 10px;border:.5px solid var(--br2);border-radius:var(--r);font-size:13px;background:var(--b1);color:var(--t1)"></div>'
+    // Status
+    +'<div style="margin-bottom:20px"><label style="font-size:12px;font-weight:600;color:var(--t2);display:block;margin-bottom:4px">STATUS</label>'
+    +'<select id="be-status" style="width:100%;padding:8px 10px;border:.5px solid var(--br2);border-radius:var(--r);font-size:13px;background:var(--b1);color:var(--t1)">'
+    +'<option value="">— no change —</option><option value="available">Available</option><option value="consigned">Consigned</option><option value="reserved">Reserved</option><option value="sold">Sold</option>'
+    +'</select></div>'
+    +'<div style="display:flex;gap:8px">'
+    +'<button class="btn p" onclick="saveBulkEdit()" style="flex:1;background:#2a6049;border-color:#2a6049;color:#fff;padding:10px">✏ Aplicar nas '+selSlabs.length+' chapas</button>'
+    +'<button class="btn" onclick="document.getElementById(\'bulk-edit-modal\').remove()" style="padding:10px 16px">Cancelar</button>'
+    +'</div>'
+    +'</div>';
+  document.body.appendChild(div);
+}
+
+async function saveBulkEdit(){
+  if(READONLY)return;
+  var mat = document.getElementById('be-material').value.trim();
+  var type = document.getElementById('be-type').value;
+  var thick = document.getElementById('be-thickness').value;
+  var finish = document.getElementById('be-finish').value;
+  var loc = document.getElementById('be-location').value;
+  var price = document.getElementById('be-price').value;
+  var status = document.getElementById('be-status').value;
+
+  // Check that at least one field is filled
+  if(!mat&&!type&&!thick&&!finish&&!loc&&!price&&!status){
+    alert('Fill in at least one field to change.');return;
+  }
+
+  var selSlabs = bulkSel.map(function(id){return slabs.find(function(s){return s.id===id;});}).filter(Boolean);
+  if(!confirm('Apply changes to '+selSlabs.length+' slab(s)?'))return;
+
+  sync('spin','Saving...');
+  var errors = 0;
+  for(var i=0;i<selSlabs.length;i++){
+    var s = selSlabs[i];
+    var upd = {};
+    if(mat) upd.material = mat;
+    if(type) upd.type = type;
+    if(thick!=='') upd.thickness = parseFloat(thick)||null;
+    if(finish) upd.finish = finish;
+    if(loc) upd.location = loc;
+    if(price!=='') upd.price_per_sqft = parseFloat(price)||null;
+    if(status) upd.status = status;
+    try{
+      await sbU('slabs', s.id, Object.assign({}, s, upd));
+      // update local array
+      slabs = slabs.map(function(x){return x.id===s.id?Object.assign({},x,upd):x;});
+    }catch(e){ errors++; }
+  }
+  document.getElementById('bulk-edit-modal').remove();
+  cancelBulkSelect();
+  rebuildSels(); renderStats(); renderTable();
+  if(errors>0) sync('err',errors+' error(s) saving');
+  else sync('ok','✅ '+selSlabs.length+' slab(s) updated');
 }
 
 function openBulkConsign(){
