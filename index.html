@@ -593,6 +593,7 @@ body.readonly .mo select { pointer-events:none !important; opacity:0.7; }
       <div class="fi"><label>Altura (pol)</label><input id="fw" type="number" min="0" step="0.1"></div>
       <div class="fi"><label>Comprimento (pol)</label><input id="fh" type="number" min="0" step="0.1"></div>
       <div class="fi"><label>Espessura / Thickness (cm)</label><input id="fthk" type="number" min="0" step="0.5" placeholder="ex: 2, 3"></div>
+      <div class="fi"><label>Acabamento / Finish</label><select id="ffinish"><option value="">— Select —</option><option value="Polished">Polished</option><option value="Honed">Honed</option><option value="Brushed">Brushed</option><option value="Leathered">Leathered</option><option value="Sandblasted">Sandblasted</option><option value="Flamed">Flamed</option><option value="Other">Other</option></select></div>
       <div class="fi"><label>Local</label>
         <div style="display:flex;gap:6px">
           <select id="floc" style="flex:1;padding:7px 10px;border:.5px solid var(--br2);border-radius:var(--r);font-size:13px;background:var(--b1);color:var(--t1)"></select>
@@ -1508,6 +1509,7 @@ function openSM(id){if(READONLY)return;
   document.getElementById('fl2').value=s?s.lot:'';document.getElementById('fn').value=s?s.num:'';
   document.getElementById('fmat').value=s?s.material:'';document.getElementById('fty').value=s?s.type:'Quartzito';
   document.getElementById('fw').value=s?s.width:'';document.getElementById('fh').value=s?s.height:'';document.getElementById('fthk').value=s&&s.thickness?s.thickness:'';
+  document.getElementById('ffinish').value=s&&s.finish?s.finish:'';
   document.getElementById('floc').value=s?s.location:locs[0];document.getElementById('fp').value=s?s.price_per_sqft:'';
   if(document.getElementById('fc'))document.getElementById('fc').value=s&&s.cost_per_sqft?s.cost_per_sqft:'';
   document.getElementById('fst').value=s?s.status:'available';
@@ -1524,6 +1526,7 @@ async function saveSlab(){if(READONLY)return;
   var btn=document.getElementById('ssb');btn.textContent='Salvando...';btn.disabled=true;
   var d={id:editId||uid(),lot:lot,num:num,material:mat,type:document.getElementById('fty').value,
     width:parseFloat(document.getElementById('fw').value)||null,height:parseFloat(document.getElementById('fh').value)||null,thickness:parseFloat(document.getElementById('fthk').value)||null,
+    finish:document.getElementById('ffinish').value||null,
     location:document.getElementById('floc').value,price_per_sqft:parseFloat(document.getElementById('fp').value)||null,
     cost_per_sqft:parseFloat(document.getElementById('fc')?document.getElementById('fc').value:0)||null,
     status:document.getElementById('fst').value,
@@ -1575,6 +1578,8 @@ async function openD(id){
     '<div class="kv"><span class="kk">Local</span><span class="kval">'+s.location+'</span></div>'+
     '<div class="kv"><span class="kk">Dimensões</span><span class="kval">'+(s.width&&s.height?s.width+'" × '+s.height+'"':'—')+'</span></div>'+
     '<div class="kv"><span class="kk">Sqft</span><span class="kval">'+(sf?sf.toFixed(2)+' sqft':'—')+'</span></div>'+
+    (s.thickness?'<div class="kv"><span class="kk">Thickness</span><span class="kval">'+s.thickness+'cm</span></div>':'')+
+    (s.finish?'<div class="kv"><span class="kk">Finish</span><span class="kval">'+s.finish+'</span></div>':'')+
     '<div class="kv"><span class="kk">Preço/sqft</span><span class="kval">'+(s.price_per_sqft?'$'+s.price_per_sqft:'—')+'</span></div>'+
     (s.cost_per_sqft?'<div class="kv"><span class="kk">Custo/sqft</span><span class="kval">$'+s.cost_per_sqft+'</span></div>':'')+
     '<div class="kv"><span class="kk">Valor total (venda)</span><span class="kval">'+(tv?fmt(tv):'—')+'</span></div>'+
@@ -2623,7 +2628,7 @@ async function updateSlabLocations(newLoc){
     sync('ok', 'Locais atualizados!');
     renderTable();
     renderStats();
-    alert('✅ ' + trSelIds.length + ' chapa(s) transferida(s) para "' + newLoc + '" com sucesso!\n\nAgora vou imprimir o documento.');
+    alert('✅ ' + trSelIds.length + ' slab(s) transferred to "' + newLoc + '" successfully!\n\nPrinting the document now.');
     window.print();
   } catch(e){
     sync('err', 'Erro ao atualizar');
@@ -2955,8 +2960,8 @@ function printBillsReport(){
     return (a.due||'').localeCompare(b.due||'');
   });
 
-  var catLabels = {rent:'Aluguel',salary:'Salário',utilities:'Utilidades',insurance:'Seguro',
-    taxes:'Impostos',loan:'Empréstimo',supplier:'Fornecedor',container:'Container',other:'Outros'};
+  var catLabels = {rent:'Rent',salary:'Salary',utilities:'Utilities',insurance:'Insurance',
+    taxes:'Taxes',loan:'Loan',supplier:'Supplier',container:'Container',other:'Other'};
 
   var totalPending = pending.reduce(function(a,b){return a+b.amount;},0);
   var totalAll = allBills.reduce(function(a,b){return a+b.amount;},0);
@@ -2969,7 +2974,7 @@ function printBillsReport(){
 
   var rows = allBills.map(function(b){
     var isOverdue = b.status!=='paid' && b.due && b.due<today;
-    var statusLabel = b.status==='paid'?'✓ Paga':isOverdue?'⚠ Vencida':'◷ Pendente';
+    var statusLabel = b.status==='paid'?'✓ Paid':isOverdue?'⚠ Overdue':'◷ Pending';
     var statusColor = b.status==='paid'?'#2a6049':isOverdue?'#c0392b':'#854f0b';
     var rowBg = isOverdue?'#fff5f5':b.status==='paid'?'#f5fff8':'#fff';
     return '<tr style="background:'+rowBg+';border-bottom:.5px solid #e8e8e8">'+
@@ -2982,10 +2987,10 @@ function printBillsReport(){
   }).join('');
 
   var summaryCards = [
-    {label:'Total Vencido',value:fmtAmt(totalOverdue),color:'#c0392b',bg:'#fff0f0'},
-    {label:'Total Pendente',value:fmtAmt(totalPending),color:'#854f0b',bg:'#fffbf0'},
-    {label:'Total Pago',value:fmtAmt(totalPaid),color:'#2a6049',bg:'#f0fff8'},
-    {label:'Total Geral',value:fmtAmt(totalAll),color:'#185fa5',bg:'#f0f6ff'},
+    {label:'Total Overdue',value:fmtAmt(totalOverdue),color:'#c0392b',bg:'#fff0f0'},
+    {label:'Total Pending',value:fmtAmt(totalPending),color:'#854f0b',bg:'#fffbf0'},
+    {label:'Total Paid',value:fmtAmt(totalPaid),color:'#2a6049',bg:'#f0fff8'},
+    {label:'Grand Total',value:fmtAmt(totalAll),color:'#185fa5',bg:'#f0f6ff'},
   ].map(function(c){
     return '<div style="flex:1;min-width:130px;background:'+c.bg+';border-radius:8px;padding:14px 18px;text-align:center">'+
       '<div style="font-size:11px;color:#888;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">'+c.label+'</div>'+
@@ -2994,7 +2999,7 @@ function printBillsReport(){
   }).join('');
 
   var html = '<!DOCTYPE html><html><head><meta charset="utf-8">'+
-    '<title>Contas a Pagar — Dilean Marbles Corp</title>'+
+    '<title>Accounts Payable — Dilean Marbles Corp</title>'+
     '<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;color:#1a1a1a;background:#fff;padding:30px}'+
     '@media print{body{padding:0}.no-print{display:none}}'+
     'h1{font-size:20px;font-weight:700;margin-bottom:2px}'+
@@ -3007,23 +3012,23 @@ function printBillsReport(){
     '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px">'+
       '<div>'+
         '<div style="font-size:11px;color:#888;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Dilean Marbles Corp</div>'+
-        '<h1>Relatório de Contas a Pagar</h1>'+
-        '<div class="sub">Gerado em '+todayFmt+' · '+allBills.length+' conta(s)</div>'+
+        '<h1>Accounts Payable Report</h1>'+
+        '<div class="sub">Generated on '+todayFmt+' · '+allBills.length+' bill(s)</div>'+
       '</div>'+
-      '<button class="no-print" onclick="window.print()" style="padding:8px 20px;background:#185fa5;color:#fff;border:none;border-radius:6px;font-size:13px;cursor:pointer;font-weight:600">🖨 Imprimir PDF</button>'+
+      '<button class="no-print" onclick="window.print()" style="padding:8px 20px;background:#185fa5;color:#fff;border:none;border-radius:6px;font-size:13px;cursor:pointer;font-weight:600">🖨 Print / PDF</button>'+
     '</div>'+
     '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:24px">'+summaryCards+'</div>'+
     '<table>'+
       '<thead><tr>'+
-        '<th style="width:100px">Vencimento</th>'+
-        '<th>Descrição</th>'+
-        '<th style="width:120px">Categoria</th>'+
+        '<th style="width:100px">Due Date</th>'+
+        '<th>Description</th>'+
+        '<th style="width:120px">Category</th>'+
         '<th style="width:100px">Status</th>'+
-        '<th style="width:120px;text-align:right">Valor</th>'+
+        '<th style="width:120px;text-align:right">Amount</th>'+
       '</tr></thead>'+
       '<tbody>'+rows+'</tbody>'+
       '<tfoot><tr>'+
-        '<td colspan="4" style="text-align:right;color:#555">TOTAL PENDENTE</td>'+
+        '<td colspan="4" style="text-align:right;color:#555">TOTAL PENDING</td>'+
         '<td style="text-align:right;color:#854f0b;font-size:15px">'+fmtAmt(totalPending)+'</td>'+
       '</tr></tfoot>'+
     '</table>'+
@@ -3531,7 +3536,7 @@ async function printTransfer(){if(READONLY)return;if(READONLY)return;
   await saveTransferRecord(transferData);
 
   // Ask if should update slab locations
-  if(confirm('Transfer Sheet gerado!\n\nDeseja atualizar o local das ' + data.total + ' chapa(s) para "' + toName + '" no estoque?')){
+  if(confirm('Transfer Sheet generated!\n\nDo you want to update the location of ' + data.total + ' slab(s) to "' + toName + '" in the inventory?')){
     updateSlabLocations(toName);
   } else {
     window.print();
@@ -3558,7 +3563,7 @@ async function updateSlabLocations(newLoc){
     sync('ok', 'Locais atualizados!');
     renderTable();
     renderStats();
-    alert('✅ ' + trSelIds.length + ' chapa(s) transferida(s) para "' + newLoc + '" com sucesso!\n\nAgora vou imprimir o documento.');
+    alert('✅ ' + trSelIds.length + ' slab(s) transferred to "' + newLoc + '" successfully!\n\nPrinting the document now.');
     window.print();
   } catch(e){
     sync('err', 'Erro ao atualizar');
@@ -5617,6 +5622,7 @@ async function printPackingList(){
         '<td style="padding:5px 8px;font-size:10px;border:1px solid #c8d8ec">'+slabNum(s)+'</td>'+
         '<td style="padding:5px 8px;font-size:10px;border:1px solid #c8d8ec">'+matDesc+'</td>'+
         '<td style="padding:5px 8px;font-size:10px;border:1px solid #c8d8ec;text-align:center">'+getThick(s)+'</td>'+
+        '<td style="padding:5px 8px;font-size:10px;border:1px solid #c8d8ec;text-align:center">'+(s.finish||'—')+'</td>'+
         '<td style="padding:5px 8px;font-size:10px;border:1px solid #c8d8ec;text-align:center">'+(s.width?inToM(s.width):'—')+'</td>'+
         '<td style="padding:5px 8px;font-size:10px;border:1px solid #c8d8ec;text-align:center">'+(s.height?inToM(s.height):'—')+'</td>'+
         '<td style="padding:5px 8px;font-size:10px;border:1px solid #c8d8ec;text-align:center">'+inToSqM(s.width,s.height)+'</td>'+
@@ -5631,7 +5637,7 @@ async function printPackingList(){
 
     return '<table style="width:100%;border-collapse:collapse;margin-bottom:16px;font-size:11px">'+
       // Bundle header
-      '<tr><td colspan="9" style="background:#185fa5;color:#fff;font-weight:700;padding:7px 10px;text-align:center;border:1px solid #185fa5;letter-spacing:.05em">'+
+      '<tr><td colspan="10" style="background:#185fa5;color:#fff;font-weight:700;padding:7px 10px;text-align:center;border:1px solid #185fa5;letter-spacing:.05em">'+
         'BUNDLE Nº '+b.lot+
       '</td></tr>'+
       // Column headers
@@ -5639,6 +5645,7 @@ async function printPackingList(){
         '<td rowspan="2" style="padding:5px 8px;font-weight:700;border:1px solid #c8d8ec;font-size:10px;vertical-align:middle;text-align:center">SLAB Nº</td>'+
         '<td rowspan="2" style="padding:5px 8px;font-weight:700;border:1px solid #c8d8ec;font-size:10px;vertical-align:middle;text-align:center">MATERIAL</td>'+
         '<td rowspan="2" style="padding:5px 8px;font-weight:700;border:1px solid #c8d8ec;font-size:10px;vertical-align:middle;text-align:center">THICKNESS</td>'+
+        '<td rowspan="2" style="padding:5px 8px;font-weight:700;border:1px solid #c8d8ec;font-size:10px;vertical-align:middle;text-align:center">FINISH</td>'+
         '<td colspan="6" style="padding:5px 8px;font-weight:700;border:1px solid #c8d8ec;font-size:10px;text-align:center">MEASURES</td>'+
       '</tr>'+
       '<tr style="background:#dce8f5">'+
@@ -5654,7 +5661,7 @@ async function printPackingList(){
       // Bundle total
       '<tr style="background:#dce8f5;font-weight:700">'+
         '<td style="padding:5px 8px;border:1px solid #c8d8ec;font-size:10px">Total Slabs: '+b.slabs.length+'</td>'+
-        '<td colspan="4" style="padding:5px 8px;border:1px solid #c8d8ec;font-size:10px">TOTAL'+(grossWt&&b.slabs.length===totalSlabs?' &nbsp;&nbsp;&nbsp; GROSS WEIGHT (KG): '+parseFloat(grossWt).toFixed(2):'')+'</td>'+
+        '<td colspan="5" style="padding:5px 8px;border:1px solid #c8d8ec;font-size:10px">TOTAL'+(grossWt&&b.slabs.length===totalSlabs?' &nbsp;&nbsp;&nbsp; GROSS WEIGHT (KG): '+parseFloat(grossWt).toFixed(2):'')+'</td>'+
         '<td style="padding:5px 8px;border:1px solid #c8d8ec;font-size:10px;text-align:center">'+bundleSqM.toFixed(3)+'</td>'+
         '<td colspan="2" style="padding:5px 8px;border:1px solid #c8d8ec;font-size:10px"></td>'+
         '<td style="padding:5px 8px;border:1px solid #c8d8ec;font-size:10px;text-align:right">'+bundleSqFt.toFixed(3)+'</td>'+
@@ -6955,13 +6962,13 @@ function openBulkTransfer(){
 }
 
 function openBulkReport(){
-  if(!bulkSel.length){alert('Selecione chapas primeiro.');return;}
+  if(!bulkSel.length){alert('Select slabs first.');return;}
   var selSlabs = bulkSel.map(function(id){return slabs.find(function(s){return s.id===id;});}).filter(Boolean);
   var containerName = '';
   var fc = document.getElementById('fc');
   if(fc&&fc.value){
     var cont = containers.find(function(c){return c.id===fc.value;});
-    if(cont) containerName = cont.num;
+    if(cont) containerName = cont.name;
   }
   printSlabsReport(selSlabs, containerName);
 }
@@ -6984,19 +6991,21 @@ function printSlabsReport(selSlabs, title){
     var slabRows = g.slabs.map(function(s){
       var dim = (s.width&&s.height)?s.width+'"×'+s.height+'"':'—';
       var thk = s.thickness?s.thickness+'cm':'—';
+      var fin = s.finish||'—';
       return '<tr><td style="padding:5px 10px;font-size:11px">'+s.num+'</td>'+
         '<td style="padding:5px 10px;font-size:11px">'+thk+'</td>'+
+        '<td style="padding:5px 10px;font-size:11px">'+fin+'</td>'+
         '<td style="padding:5px 10px;font-size:11px">'+dim+'</td>'+
         '<td style="padding:5px 10px;font-size:11px;text-align:right">'+(sqft(s)?sqft(s).toFixed(2):'—')+'</td>'+
         '<td style="padding:5px 10px;font-size:11px;text-align:right">'+(sv(s)?'$'+sv(s).toFixed(2):'—')+'</td>'+
-        '<td style="padding:5px 10px;font-size:11px;color:#666">'+(s.status==='sold'?'Vendida':s.status==='consigned'?'Consignada':s.status==='reserved'?'Reservada':'Disponível')+'</td>'+
+        '<td style="padding:5px 10px;font-size:11px;color:#666">'+(s.status==='sold'?'Sold':s.status==='consigned'?'Consigned':s.status==='reserved'?'Reserved':'Available')+'</td>'+
       '</tr>';
     }).join('');
     var lotSqft = g.slabs.reduce(function(a,s){return a+sqft(s);},0);
-    return '<tr style="background:#f0f4f8"><td colspan="6" style="padding:8px 10px;font-size:12px;font-weight:700">Lote '+g.lot+' — '+g.material+' ('+g.type+') — '+g.slabs.length+' chapas / '+lotSqft.toFixed(1)+' sqft</td></tr>'+slabRows;
+    return '<tr style="background:#f0f4f8"><td colspan="7" style="padding:8px 10px;font-size:12px;font-weight:700">Lot '+g.lot+' — '+g.material+' ('+g.type+') — '+g.slabs.length+' slabs / '+lotSqft.toFixed(1)+' sqft</td></tr>'+slabRows;
   }).join('');
 
-  var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Relatório de Chapas</title>'+
+  var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Slabs Report</title>'+
     '<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;color:#1a1a1a;padding:30px}'+
     '@media print{.no-print{display:none}}table{width:100%;border-collapse:collapse}'+
     'thead th{background:#1a1a1a;color:#fff;padding:8px 10px;font-size:11px;text-align:left}'+
@@ -7004,13 +7013,13 @@ function printSlabsReport(selSlabs, title){
     '</style></head><body>'+
     '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px">'+
       '<div><div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Dilean Marbles Corp</div>'+
-      '<h1 style="font-size:20px;font-weight:700;margin-bottom:2px">Relatório de Chapas'+(title?' — '+title:'')+'</h1>'+
-      '<div style="font-size:12px;color:#888">'+todayFmt+' · '+selSlabs.length+' chapas · '+totalSqft.toFixed(1)+' sqft</div></div>'+
-      '<button class="no-print" onclick="window.print()" style="padding:8px 20px;background:#1a1a1a;color:#fff;border:none;border-radius:6px;font-size:13px;cursor:pointer">🖨 Imprimir PDF</button>'+
+      '<h1 style="font-size:20px;font-weight:700;margin-bottom:2px">Slabs Report'+(title?' — '+title:'')+'</h1>'+
+      '<div style="font-size:12px;color:#888">'+todayFmt+' · '+selSlabs.length+' slabs · '+totalSqft.toFixed(1)+' sqft</div></div>'+
+      '<button class="no-print" onclick="window.print()" style="padding:8px 20px;background:#1a1a1a;color:#fff;border:none;border-radius:6px;font-size:13px;cursor:pointer">🖨 Print / PDF</button>'+
     '</div>'+
-    '<table><thead><tr><th>#</th><th>Espessura</th><th>Dimensões</th><th style="text-align:right">Sqft</th><th style="text-align:right">Valor</th><th>Status</th></tr></thead>'+
+    '<table><thead><tr><th>#</th><th>Thickness</th><th>Finish</th><th>Dimensions</th><th style="text-align:right">Sqft</th><th style="text-align:right">Value</th><th>Status</th></tr></thead>'+
     '<tbody>'+rows+'</tbody>'+
-    '<tfoot><tr><td colspan="3" style="text-align:right;color:#555">TOTAL</td>'+
+    '<tfoot><tr><td colspan="4" style="text-align:right;color:#555">TOTAL</td>'+
       '<td style="text-align:right">'+totalSqft.toFixed(1)+'</td>'+
       '<td style="text-align:right;color:#185fa5">$'+totalVal.toFixed(2)+'</td>'+
       '<td></td></tr></tfoot></table>'+
