@@ -3258,6 +3258,7 @@ function renderTransfersList(){
       '</div>'+
       '<div style="display:flex;gap:6px">'+
         '<button class="btn sm p" onclick="reprintTransfer(this.dataset.id)" data-id="'+t.id+'">🖨 Reimprimir</button>'+
+        '<button class="btn sm readonly-hide" onclick="proformaFromTransfer(this.dataset.id)" data-id="'+t.id+'" style="border-color:#6b3fa0;color:#6b3fa0">🗒 Proforma</button>'+
         '<button class="btn sm readonly-hide" onclick="editTransfer(this.dataset.id)" data-id="'+t.id+'">✏ Editar</button>'+
         '<button class="btn sm dn readonly-hide" onclick="deleteTransfer(this.dataset.id)" data-id="'+t.id+'">✕</button>'+
       '</div>'+
@@ -6097,6 +6098,7 @@ function renderPackingListsList(){
       '</div>'+
       '<div style="display:flex;gap:6px">'+
         '<button class="btn sm" onclick="reprintPackingList(this.dataset.id)" data-id="'+p.id+'" style="border-color:#185fa5;color:#185fa5">🖨 Reimprimir</button>'+
+        '<button class="btn sm readonly-hide" onclick="proformaFromPL(this.dataset.id)" data-id="'+p.id+'" style="border-color:#6b3fa0;color:#6b3fa0">🗒 Proforma</button>'+
         '<button class="btn sm readonly-hide" onclick="editPackingListDoc(this.dataset.id)" data-id="'+p.id+'">✏ Editar</button>'+
         '<button class="btn sm dn readonly-hide" onclick="deletePackingListDoc(this.dataset.id)" data-id="'+p.id+'">✕</button>'+
       '</div>'+
@@ -6170,6 +6172,32 @@ function packingFromProforma(proformaId){
     date: p.date||new Date().toISOString().slice(0,10),
     consignee: p.to_name||''
   });
+}
+
+function proformaFromPL(id){
+  var p = packingLists.find(function(x){return x.id===id;});
+  if(!p)return;
+  pfsSelIds = Array.isArray(p.slab_ids)?p.slab_ids.slice():[];
+  showPage('proforma');
+  setTimeout(function(){
+    if(p.consignee){
+      var el=document.getElementById('pfs-to-name');
+      if(el)el.value=p.consignee;
+    }
+  },80);
+}
+
+function proformaFromTransfer(id){
+  var t = transfers.find(function(x){return x.id===id;});
+  if(!t)return;
+  pfsSelIds = Array.isArray(t.slab_ids)?t.slab_ids.slice():[];
+  showPage('proforma');
+  setTimeout(function(){
+    if(t.to_name){
+      var el=document.getElementById('pfs-to-name');
+      if(el)el.value=t.to_name;
+    }
+  },80);
 }
 
 // ══════════════════════════════════════════════════════
