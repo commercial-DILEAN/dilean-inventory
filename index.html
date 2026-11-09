@@ -1056,7 +1056,7 @@ var H={'Content-Type':'application/json','apikey':SK,'Authorization':'Bearer '+S
 async function sbG(t,q){var r=await fetch(SB+'/rest/v1/'+t+'?order=created_at.asc'+(q||''),{headers:H});if(!r.ok)throw new Error(await r.text());return r.json();}
 async function sbGNoPhoto(t){
   // load slabs without photo field to avoid huge JSON
-  var cols='id,lot,num,material,type,width,height,location,price_per_sqft,cost_per_sqft,status,sold_to,obs,container_id,created_at';
+  var cols='id,lot,num,material,type,width,height,location,price_per_sqft,cost_per_sqft,status,sold_to,obs,container_id,created_at,thickness,finish';
   var r=await fetch(SB+'/rest/v1/'+t+'?order=created_at.asc&select='+cols,{headers:H});
   if(!r.ok)throw new Error(await r.text());
   return r.json();
@@ -5564,7 +5564,7 @@ function genPackingList(prefill){
       ?'<div style="background:var(--b2);border-radius:var(--r);padding:8px 12px;margin-bottom:12px;font-size:12px">'+selSlabs.length+' chapas selecionadas</div>'
       :'<div style="background:#faeeda;border-radius:var(--r);padding:8px 12px;margin-bottom:12px;font-size:12px;color:#854f0b">⚠ Selecione chapas primeiro (na seção abaixo ou via Transfer).</div>')+
     '<div class="fg">'+
-      '<div class="fi"><label>Packing List No.</label><input id="pl-num" value="'+(prefill&&prefill.num?prefill.num:'PL-'+new Date().toISOString().slice(2,10).replace(/-/g,''))+'"></div>'+
+      '<div class="fi"><label>Packing List No.</label><input id="pl-num" value="'+(prefill&&prefill.num?prefill.num:(function(){var nums=packingLists.map(function(p){var m=(p.num||'').match(/(\d+)$/);return m?parseInt(m[1]):0;});var next=nums.length?Math.max.apply(null,nums)+1:1;return 'PL-'+String(next).padStart(3,'0');})())+'"></div>'+
       '<div class="fi"><label>Date</label><input id="pl-date" type="date" value="'+(prefill&&prefill.date?prefill.date:new Date().toISOString().slice(0,10))+'"></div>'+
       '<div class="fi"><label>Shipper</label><input id="pl-shipper" value="DILEAN MARBLES CORP"></div>'+
       '<div class="fi"><label>Container Dilean Number</label><input id="pl-consignee" placeholder="ex: 9C2026" value="'+(prefill&&prefill.consignee?prefill.consignee:'')+'"></div>'+
@@ -5601,6 +5601,7 @@ async function printPackingList(){
   var inToSqM = function(w,h){return(w&&h)?((w*h)/1550).toFixed(3):'—';};
   var inToSqFt = function(w,h){return(w&&h)?((w*h)/144).toFixed(3):'—';};
   var getThick = function(s){
+    if(s.thickness) return s.thickness+' CM';
     if(s.type){var m=s.type.match(/(\d+)\s*cm/i);if(m)return m[1]+' CM';}
     return '—';
   };
