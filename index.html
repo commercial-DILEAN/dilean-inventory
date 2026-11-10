@@ -259,7 +259,14 @@ body.readonly .mo select { pointer-events:none !important; opacity:0.7; }
           <span class="li"><span class="ld" style="background:#fac775"></span>Reservada</span>
           <span class="li"><span class="ld" style="background:#f09595"></span>Vendida</span>
         </div>
-        <button class="btn p" onclick="printVisualReport()" id="btn-print-visual" style="display:none">🖨 Imprimir visual</button>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <select id="vis-status-filter" onchange="visStatusFilter=this.value;renderVis().catch(function(e){console.error(e);})" style="font-size:12px;padding:5px 10px;border:1px solid var(--br1);border-radius:6px;background:var(--b2);color:var(--t1)">
+            <option value="all">Todas as chapas</option>
+            <option value="consigned">Só consignadas</option>
+            <option value="consigned+sold">Consignadas + vendidas</option>
+          </select>
+          <button class="btn p" onclick="printVisualReport()" id="btn-print-visual" style="display:none">🖨 Imprimir visual</button>
+        </div>
       </div>
       <div id="consignment-summary" style="margin-bottom:16px"></div>
       <div class="lg" id="lg"></div>
@@ -1082,7 +1089,7 @@ async function sbD(t,id){var r=await fetch(SB+'/rest/v1/'+t+'?id=eq.'+id,{method
 async function sbUpsert(t,d){var r=await fetch(SB+'/rest/v1/'+t,{method:'POST',headers:Object.assign({},H,{'Prefer':'resolution=merge-duplicates'}),body:JSON.stringify(d)});if(!r.ok)throw new Error(await r.text());return r.json();}
 
 var slabs=[],invoices=[],bulkMode=false,bulkSel=[],transfers=[],proformas=[],packingLists=[],clients=[],bills=[],fixedExps=[],generalExps=[],containers=[],finBalance=0,finBalanceDate='',locs=['Meta Surface','ZTX Surfaces','Pacific Shore','Hope Solutions','Escritório'];
-var editId=null,editInvId=null,editClientId=null,selLoc=null,selIds=[],curPhoto=null,eic=0;
+var editId=null,editInvId=null,editClientId=null,selLoc=null,selIds=[],curPhoto=null,eic=0,visStatusFilter='all';
 var cfg={name:'DILEAN MARBLES CORP',addr:'1661 E Sample Rd, Pompano Beach FL 33064',phone:'346 455 8150',email:'',bank:'Bank Of America, N.A.',acct:'8981 6729 0208',wire:'063100277',swift:'BOFAUS6S',zelle:'346 455 8150',bankAddr:'555 California St., San Francisco, CA 94104'};
 
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
@@ -1696,8 +1703,12 @@ async function renderVis(){
   }).join('');
   var sv2=document.getElementById('sv');
   if(!selLoc){sv2.innerHTML='<div class="empty">Selecione um local acima.</div>';return;}
-  var ls=slabs.filter(function(s){return s.location===selLoc||(s.sold_to===selLoc&&s.status==='sold');});
-  if(!ls.length){sv2.innerHTML='<div class="empty">Nenhuma chapa neste local.</div>';return;}
+  var ls=slabs.filter(function(s){
+    if(visStatusFilter==='consigned') return s.location===selLoc&&s.status==='consigned';
+    if(visStatusFilter==='consigned+sold') return (s.location===selLoc&&s.status==='consigned')||(s.sold_to===selLoc&&s.status==='sold');
+    return s.location===selLoc||(s.sold_to===selLoc&&s.status==='sold');
+  });
+  if(!ls.length){sv2.innerHTML='<div class="empty">Nenhuma chapa com este filtro neste local.</div>';return;}
 
   // Pre-load ALL photos for this location
   var missing=ls.filter(function(s){return !s.photo;});
@@ -2644,8 +2655,13 @@ async function updateSlabLocations(newLoc){
 function printVisualReport(){
   if(!selLoc)return;
   var now = new Date();
-  var ls = slabs.filter(function(s){return s.location===selLoc;});
-  if(!ls.length)return;
+  var ls = slabs.filter(function(s){
+    if(visStatusFilter==='consigned') return s.location===selLoc&&s.status==='consigned';
+    if(visStatusFilter==='consigned+sold') return (s.location===selLoc&&s.status==='consigned')||(s.sold_to===selLoc&&s.status==='sold');
+    return s.location===selLoc||(s.sold_to===selLoc&&s.status==='sold');
+  });
+  var filterLabel=visStatusFilter==='consigned'?'Consignadas':visStatusFilter==='consigned+sold'?'Consignadas + Vendidas':'Todas';
+  if(!ls.length){alert('Nenhuma chapa com este filtro neste local.');return;}
 
   var SLfull={available:'Disponível',sold:'Vendida',reserved:'Reservada',consigned:'Consignada'};
   var stColor={available:'#3b6d11',sold:'#a32d2d',reserved:'#854f0b',consigned:'#185fa5'};
@@ -2699,7 +2715,8 @@ function printVisualReport(){
     '</div>'+
     '<div style="text-align:right">'+
     '<div style="font-size:16px;font-weight:700;color:#1a5c3a">RELATÓRIO VISUAL — '+selLoc.toUpperCase()+'</div>'+
-    '<div style="font-size:11px;color:#666;margin-top:3px">'+now.toLocaleDateString('pt-BR')+' às '+now.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})+'</div>'+
+    '<div style="font-size:11px;color:#185fa5;font-weight:600;margin-top:2px">'+filterLabel+'</div>'+
+    '<div style="font-size:11px;color:#666;margin-top:2px">'+now.toLocaleDateString('pt-BR')+' às '+now.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})+'</div>'+
     '</div></div>'+
 
     // Summary
@@ -2725,7 +2742,7 @@ function printVisualReport(){
     lotSections+
 
     '<div style="text-align:center;font-size:10px;color:#999;margin-top:12px;border-top:1px solid #e0e0e0;padding-top:8px">'+
-    'DILEAN MARBLES CORP — Relatório Visual — '+selLoc+' — '+ls.length+' chapas'+
+    'DILEAN MARBLES CORP — Relatório Visual — '+selLoc+' — '+filterLabel+' — '+ls.length+' chapas'+
     '</div></div>';
 
   document.getElementById('print-area').innerHTML=html;
