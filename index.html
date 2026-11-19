@@ -5638,7 +5638,8 @@ async function printPackingList(){
 
   // Build bundle sections
   var bundleHTML = Object.values(bundles).sort(function(a,b){return a.lot.localeCompare(b.lot,undefined,{numeric:true});}).map(function(b){
-    var matDesc = 'POLISHED SLAB OF '+(b.material.toUpperCase())+' '+(b.type||'').toUpperCase();
+    var bundleFinish = (b.slabs[0]&&b.slabs[0].finish)?b.slabs[0].finish.toUpperCase():'POLISHED';
+    var matDesc = bundleFinish+' SLAB OF '+(b.material.toUpperCase())+' '+(b.type||'').toUpperCase();
     var slabRows = b.slabs.sort(function(a,c){return parseInt(a.num)-parseInt(c.num);}).map(function(s,si){
       var bg = si%2===0?'#fff':'#f5f8fc';
       return '<tr style="background:'+bg+'">'+
